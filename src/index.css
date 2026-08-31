@@ -1,1 +1,47 @@
 @import "tailwindcss";
+
+:root { font-family: Georgia, 'Times New Roman', serif; color: #17231f; background: #f1eee8; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input { font: inherit; }
+.app-shell { min-height: 100vh; background: #f1eee8; }
+.app-header { height: 76px; padding: 0 6vw; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d9d5cc; background: rgba(247, 245, 240, .8); }
+.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; background: #b6d6c6; color: #17392d; font: 700 21px Georgia, serif; transform: rotate(-7deg); }
+.brand-name { margin-left: 10px; color: #17392d; font: 700 21px Georgia, serif; letter-spacing: -.3px; }
+.header-account { display: flex; align-items: center; gap: 18px; color: #52625b; font: 13px Arial, sans-serif; }
+.header-account button, .switch-mode button { border: 0; padding: 0; color: #237052; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.app-main { min-height: calc(100vh - 120px); display: grid; grid-template-columns: minmax(280px, .9fr) minmax(320px, 440px); align-items: center; gap: 8vw; max-width: 1120px; margin: auto; padding: 70px 6vw; }
+.product-story { max-width: 450px; }
+.story-kicker, .eyebrow { margin: 0 0 18px; color: #368566; font: 700 11px Arial, sans-serif; letter-spacing: 1.8px; text-transform: uppercase; }
+.product-story h2, .workspace-welcome h1 { margin: 0; color: #17392d; font-size: clamp(44px, 6vw, 76px); line-height: .98; letter-spacing: -3px; font-weight: 500; }
+.product-story > p:not(.story-kicker) { max-width: 330px; margin: 26px 0; color: #68756e; font: 16px/1.6 Arial, sans-serif; }
+.story-meta { display: flex; align-items: center; gap: 9px; color: #52625b; font: 12px Arial, sans-serif; }
+.meta-dot { width: 8px; height: 8px; border-radius: 50%; background: #4aa378; box-shadow: 0 0 0 4px #d4e6dc; }
+.login-card { padding: 42px; background: #fbfaf7; border: 1px solid #d9d5cc; box-shadow: 12px 12px 0 #dce5de; }
+.login-intro h1 { margin: 0; color: #17392d; font-size: 34px; font-weight: 500; letter-spacing: -1px; }
+.login-intro p { margin: 9px 0 28px; color: #718079; font: 14px/1.5 Arial, sans-serif; }
+.login-form { display: grid; gap: 18px; }
+.login-form label { display: grid; gap: 8px; color: #52625b; font: 12px Arial, sans-serif; }
+.login-form input { width: 100%; padding: 13px 14px; border: 1px solid #cbcfc8; border-radius: 0; outline: 0; color: #17392d; background: #fff; font: 15px Arial, sans-serif; }
+.login-form input:focus { border-color: #368566; box-shadow: 0 0 0 3px #d9ebe1; }
+.submit-button { border: 0; border-radius: 0; padding: 14px; margin-top: 3px; color: #fff; background: #237052; font: 700 13px Arial, sans-serif; cursor: pointer; }
+.submit-button:hover { background: #174c38; }
+.submit-button:disabled { cursor: wait; opacity: .65; }
+.google-button { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 13px; border: 1px solid #cbcfc8; border-radius: 0; color: #34423b; background: #fff; font: 700 13px Arial, sans-serif; cursor: pointer; }
+.google-button:hover { background: #f4f6f3; border-color: #9aa99f; }
+.google-button:disabled { cursor: wait; opacity: .65; }
+.google-icon { color: #4285f4; font: 700 18px Arial, sans-serif; }
+.form-divider { display: flex; align-items: center; gap: 10px; margin: 21px 0; color: #9aa39d; font: 11px Arial, sans-serif; text-transform: uppercase; letter-spacing: .5px; }
+.form-divider::before, .form-divider::after { content: ''; height: 1px; flex: 1; background: #dedfd9; }
+.switch-mode { margin: 24px 0 0; color: #7b857f; text-align: center; font: 12px Arial, sans-serif; }
+.form-message { margin: -8px 0 18px; padding: 11px 13px; font: 12px/1.4 Arial, sans-serif; }
+.error-message { color: #9b4036; background: #f8e7e3; }
+.success-message { color: #276849; background: #e3f1e8; }
+.app-footer { padding: 20px 6vw; color: #8b948e; font: 11px Arial, sans-serif; text-align: center; }
+.app-footer span { padding: 0 7px; color: #72a88b; }
+.loading-screen { min-height: 100vh; display: grid; place-items: center; color: #52625b; background: #f1eee8; font: 14px Arial, sans-serif; }
+.workspace-welcome { grid-column: 1 / -1; max-width: 680px; }
+.workspace-welcome h1 { font-size: clamp(46px, 7vw, 82px); }
+.workspace-welcome p { color: #68756e; font: 16px/1.6 Arial, sans-serif; }
+.workspace-welcome strong { color: #237052; }
+@media (max-width: 700px) { .app-header { height: 64px; padding: 0 22px; } .brand-name { font-size: 18px; } .header-account span { display: none; } .app-main { display: flex; flex-direction: column; align-items: stretch; gap: 44px; padding: 54px 22px 35px; } .product-story { max-width: none; } .product-story h2 { font-size: 53px; } .login-card { padding: 30px 24px; box-shadow: 7px 7px 0 #dce5de; } }

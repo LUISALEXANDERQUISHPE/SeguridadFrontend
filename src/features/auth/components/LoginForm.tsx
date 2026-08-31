@@ -1,55 +1,116 @@
-import React, { useState } from 'react';
-import Button from '../../../components/common/Button';
+import React, { useState } from 'react'
+import Button from '../../../components/common/Button'
+import { login, loginWithGoogle, register } from '../services/authService'
 
-export const LoginForm: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+interface LoginFormProps {
+  onAuthenticated: (token: string) => void
+}
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert(`Iniciando sesión con: ${email}`);
-  };
+export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleGoogleLogin = async () => {
+    setError('')
+    setSubmitting(true)
+    try {
+      await loginWithGoogle()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'No fue posible iniciar con Google')
+      setSubmitting(false)
+    }
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setError('')
+    setNotice('')
+    setSubmitting(true)
+    try {
+      if (isRegistering) {
+        await register(username.trim(), email.trim(), password)
+        setNotice('Cuenta creada. Ya puedes iniciar sesión.')
+        setIsRegistering(false)
+      } else {
+        const response = await login(email.trim(), password)
+        onAuthenticated(response.token)
+      }
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Ocurrió un error inesperado')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
-    <div className="bg-white p-8 rounded-xl shadow-md border border-slate-100">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Iniciar Sesión</h2>
-        <p className="text-sm text-slate-500 mt-1">Ingresa tus credenciales para acceder</p>
+    <div className="login-card">
+      <div className="login-intro">
+        <span className="eyebrow">{isRegistering ? 'Nuevo espacio' : 'Bienvenido de nuevo'}</span>
+        <h1>{isRegistering ? 'Crea tu cuenta' : 'Inicia sesión'}</h1>
+        <p>{isRegistering ? 'Empieza a trabajar en tus documentos seguros.' : 'Tu trabajo, listo para continuar donde lo dejaste.'}</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            Correo Electrónico
-          </label>
+      {error && <div className="form-message error-message" role="alert">{error}</div>}
+      {notice && <div className="form-message success-message" role="status">{notice}</div>}
+
+      {!isRegistering && <>
+        <button type="button" className="google-button" onClick={handleGoogleLogin} disabled={submitting}>
+          <span className="google-icon">G</span>
+          {submitting ? 'Conectando...' : 'Continuar con Google'}
+        </button>
+        <div className="form-divider"><span>o continúa con correo</span></div>
+      </>}
+
+      <form onSubmit={handleSubmit} className="login-form">
+        {isRegistering && <label>
+          Nombre de usuario
+          <input
+            type="text"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="tu_usuario"
+            autoComplete="username"
+            required
+          />
+
+        </label>}
+        <label>
+          Correo electrónico
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            placeholder="usuario@ejemplo.com"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="tu.nombre@gmail.com"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            name="email"
             required
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            Contraseña
-          </label>
+        </label>
+        <label>
+          Contraseña
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            placeholder="••••••••"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Mínimo 8 caracteres"
+            minLength={8}
+            autoComplete={isRegistering ? 'new-password' : 'current-password'}
             required
           />
-        </div>
+        </label>
 
-        <Button type="submit" variant="primary" fullWidth className="mt-2">
-          Ingresar
+        <Button type="submit" variant="primary" fullWidth disabled={submitting} className="submit-button">
+          {submitting ? 'Procesando...' : isRegistering ? 'Crear cuenta' : 'Iniciar con correo'}
         </Button>
       </form>
+      <p className="switch-mode">{isRegistering ? '¿Ya tienes una cuenta?' : '¿Aún no tienes cuenta?'} <button type="button" onClick={() => { setIsRegistering(!isRegistering); setError(''); setNotice('') }}>{isRegistering ? 'Inicia sesión' : 'Regístrate'}</button></p>
     </div>
   );
 };

@@ -1,4 +1,23 @@
-# React + TypeScript + Vite
+# Secureleaf frontend
+
+Frontend React + Vite para el flujo de autenticación de `BackendSeguridad`.
+
+## Configuración
+
+Copia `.env.example` como `.env` y cambia `VITE_API_URL` si el backend no está en la dirección local:
+
+```env
+VITE_API_URL=http://localhost:5000/api
+```
+
+## Ejecución
+
+```bash
+npm install
+npm run dev
+```
+
+El formulario permite registrar usuarios e iniciar sesión. El token JWT se conserva en `localStorage` y se valida mediante `/api/auth/profile` al recargar.
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

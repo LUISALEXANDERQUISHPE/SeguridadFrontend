@@ -1,18 +1,19 @@
 import Header from './components/layout/Header'
 import LoginForm from './features/auth/components/LoginForm'
+import { useAuth } from './hooks/useAuth'
 
 function App() {
+  const { isAuthenticated, loading, profile, signIn, signOut } = useAuth()
+
+  if (loading) return <div className="loading-screen">Comprobando tu sesión...</div>
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      <Header />
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <LoginForm />
-        </div>
+    <div className={`app-shell ${isAuthenticated ? 'authenticated' : ''}`}>
+      <Header authenticated={isAuthenticated} username={profile?.username} onSignOut={signOut} />
+      <main className="app-main">
+        {isAuthenticated ? <section className="workspace-welcome"><span className="eyebrow">Sesión activa</span><h1>Tu espacio está listo.</h1><p>Has iniciado sesión como <strong>{profile?.username}</strong>. El área de trabajo puede crecer desde aquí.</p></section> : <><section className="product-story"><p className="story-kicker">Documentos que avanzan contigo</p><h2>Escribe sin perder el hilo.</h2><p>Un espacio claro para colaborar, compilar y proteger cada idea.</p><div className="story-meta"><span className="meta-dot" /> API segura conectada</div></section><div className="login-wrap"><LoginForm onAuthenticated={signIn} /></div></>}
       </main>
-      <footer className="py-4 text-center text-xs text-slate-500 border-t border-slate-200 bg-white">
-        &copy; {new Date().getFullYear()} - Estructura de Proyecto Frontend
-      </footer>
+      <footer className="app-footer">Secureleaf <span>•</span> {new Date().getFullYear()}</footer>
     </div>
   )
 }
