@@ -17,10 +17,10 @@ export function login(email: string, password: string) {
   })
 }
 
-export function register(username: string, email: string, password: string) {
-  return apiRequest<{ message: string }>('/auth/register', {
+export function register(fullName: string, email: string, password: string) {
+  return apiRequest<{ message: string; user?: unknown }>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ fullName, email, password }),
   })
 }
 
