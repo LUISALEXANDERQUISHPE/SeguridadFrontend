@@ -7,7 +7,7 @@ interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
-  const [username, setUsername] = useState('')
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isRegistering, setIsRegistering] = useState(false)
@@ -33,9 +33,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
     setSubmitting(true)
     try {
       if (isRegistering) {
-        await register(username.trim(), email.trim(), password)
+        await register(fullName.trim(), email.trim(), password)
         setNotice('Cuenta creada. Ya puedes iniciar sesión.')
         setIsRegistering(false)
+        setFullName('')
       } else {
         const response = await login(email.trim(), password)
         onAuthenticated(response.token)
@@ -68,13 +69,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onAuthenticated }) => {
 
       <form onSubmit={handleSubmit} className="login-form">
         {isRegistering && <label>
-          Nombre de usuario
+          Nombre completo
           <input
             type="text"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            placeholder="tu_usuario"
-            autoComplete="username"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            placeholder="Tu nombre completo"
+            autoComplete="name"
             required
           />
 
