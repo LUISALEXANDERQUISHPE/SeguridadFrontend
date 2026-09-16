@@ -45,3 +45,226 @@ button, input { font: inherit; }
 .workspace-welcome p { color: #68756e; font: 16px/1.6 Arial, sans-serif; }
 .workspace-welcome strong { color: #237052; }
 @media (max-width: 700px) { .app-header { height: 64px; padding: 0 22px; } .brand-name { font-size: 18px; } .header-account span { display: none; } .app-main { display: flex; flex-direction: column; align-items: stretch; gap: 44px; padding: 54px 22px 35px; } .product-story { max-width: none; } .product-story h2 { font-size: 53px; } .login-card { padding: 30px 24px; box-shadow: 7px 7px 0 #dce5de; } }
+
+.header-nav { display: flex; align-items: center; gap: 8px; margin-left: 14px; }
+.nav-link { border: 0; background: transparent; padding: 6px 12px; color: #52625b; font: 600 13px Arial, sans-serif; cursor: pointer; border-radius: 4px; transition: all 0.15s ease; }
+.nav-link:hover { color: #17392d; background: #e3dfd7; }
+.nav-link.active { color: #17392d; background: #d6e2db; font-weight: 700; }
+.app-main-editor { min-height: calc(100vh - 120px); display: flex; flex-direction: column; width: 100%; margin: 0; padding: 0; }
+
+/* Overleaf Layout Root */
+.overleaf-editor-root { display: flex; flex-direction: column; height: calc(100vh - 120px); width: 100%; background: #fdfdfd; position: relative; overflow: hidden; }
+
+/* Barra Superior de Herramientas */
+.editor-top-toolbar { height: 50px; background: #f7f5f0; border-bottom: 1px solid #d9d5cc; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; flex-shrink: 0; user-select: none; }
+.toolbar-doc-info { display: flex; align-items: center; gap: 10px; }
+.doc-icon { font-size: 18px; }
+.doc-title-box { display: flex; align-items: center; gap: 12px; }
+.doc-title { font-family: Georgia, serif; font-weight: 700; font-size: 15px; color: #17392d; }
+.doc-badges { display: flex; align-items: center; gap: 6px; }
+
+.status-badge { font-family: Arial, sans-serif; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+.badge-saved { color: #166534; background: #dcfce7; }
+.badge-saving { color: #1e40af; background: #dbeafe; }
+.badge-unsaved { color: #b45309; background: #fef3c7; }
+.badge-error { color: #991b1b; background: #fee2e2; }
+.badge-compiling { color: #1e40af; background: #dbeafe; }
+.badge-compile-success { color: #15803d; background: #dcfce7; }
+.badge-compile-failed { color: #b91c1c; background: #fee2e2; }
+
+.toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.toolbar-divider { width: 1px; height: 22px; background: #d9d5cc; margin: 0 4px; }
+.toolbar-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-family: Arial, sans-serif; font-size: 12px; font-weight: 600; border-radius: 4px; border: 1px solid transparent; cursor: pointer; transition: all 0.15s ease; }
+.btn-secondary { background: #ffffff; border-color: #cbcfc8; color: #34423b; }
+.btn-secondary:hover { background: #f1eee8; border-color: #9aa99f; }
+.btn-compile { background: #237052; color: #ffffff; border-color: #1c5b42; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+.btn-compile:hover { background: #1a563e; }
+.btn-compile:disabled { opacity: 0.6; cursor: wait; }
+.btn-spinner { width: 12px; height: 12px; border: 2px solid #ffffff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+.toolbar-dropdown-container { position: relative; }
+.toolbar-dropdown-menu { position: absolute; right: 0; top: calc(100% + 4px); background: #ffffff; border: 1px solid #cbcfc8; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 50; min-width: 220px; overflow: hidden; }
+.dropdown-item { width: 100%; text-align: left; padding: 10px 14px; font-family: Arial, sans-serif; font-size: 12px; color: #2d3748; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.dropdown-item:hover { background: #f1eee8; color: #17392d; }
+
+/* Contenedor Dividido (Split) */
+.overleaf-split-container { display: flex; flex: 1; height: calc(100% - 50px); overflow: hidden; position: relative; width: 100%; }
+.overleaf-panel { display: flex; flex-direction: column; overflow: hidden; height: 100%; position: relative; }
+.panel-left { background: #ffffff; }
+.panel-right { background: #f3f4f6; border-left: 1px solid #e5e7eb; }
+.overleaf-splitter { width: 8px; background: #eae6dd; cursor: col-resize; display: flex; align-items: center; justify-content: center; z-index: 20; user-select: none; transition: background 0.15s ease; }
+.overleaf-splitter:hover, .overleaf-splitter.dragging { background: #237052; }
+.splitter-handle { width: 2px; height: 26px; background: #9c988e; border-radius: 1px; }
+
+/* Editor de Código LaTeX */
+.latex-editor-container { display: flex; flex-direction: column; height: 100%; width: 100%; position: relative; background: #ffffff; }
+.editor-find-bar { position: absolute; top: 10px; right: 20px; z-index: 30; background: #fdfcf9; border: 1px solid #cbcfc8; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+.find-inputs { display: flex; align-items: center; gap: 6px; }
+.find-input { padding: 4px 8px; border: 1px solid #cbcfc8; border-radius: 3px; font-size: 12px; font-family: Arial, sans-serif; outline: none; width: 130px; }
+.find-counter { font-size: 11px; color: #718079; font-family: Arial, sans-serif; min-width: 60px; }
+.find-btn { padding: 3px 8px; border: 1px solid #cbcfc8; background: #f1eee8; border-radius: 3px; font-size: 11px; cursor: pointer; }
+.find-btn:hover { background: #e3dfd7; }
+.find-close-btn { background: transparent; border: none; font-size: 14px; cursor: pointer; color: #718079; }
+
+.latex-editor-body { display: flex; flex: 1; overflow: hidden; position: relative; }
+.editor-gutter { width: 56px; background: #f8f6f0; border-right: 1px solid #e5e2d8; overflow: hidden; user-select: none; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; line-height: 22px; padding: 12px 0; text-align: right; flex-shrink: 0; }
+.gutter-line { height: 22px; padding-right: 8px; position: relative; display: flex; align-items: center; justify-content: flex-end; color: #9da7a0; font-size: 12px; }
+.gutter-line.has-error { color: #dc2626; font-weight: bold; background: rgba(239, 68, 68, 0.12); }
+.gutter-line.has-warning { color: #d97706; background: rgba(245, 158, 11, 0.12); }
+.gutter-line.is-target, .gutter-line.is-target-highlight { background: rgba(245, 158, 11, 0.35) !important; color: #b45309 !important; font-weight: 700; animation: pulseTarget 2.5s ease-out; }
+@keyframes pulseTarget { 0% { background: rgba(245, 158, 11, 0.6); } 100% { background: rgba(245, 158, 11, 0.15); } }
+.editor-line-highlight-bar { position: absolute; left: 0; right: 0; height: 22px; background: rgba(245, 158, 11, 0.18); border-top: 1px solid rgba(245, 158, 11, 0.6); border-bottom: 1px solid rgba(245, 158, 11, 0.6); pointer-events: none; z-index: 3; animation: highlightFade 2.5s ease-out forwards; }
+@keyframes highlightFade { 0% { background: rgba(245, 158, 11, 0.35); border-color: rgba(245, 158, 11, 0.85); } 70% { background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.5); } 100% { background: rgba(245, 158, 11, 0.05); border-color: transparent; } }
+.gutter-badge { font-size: 9px; margin-right: 4px; }
+.badge-error { color: #dc2626; }
+.badge-warning { color: #d97706; }
+
+.editor-workspace { flex: 1; position: relative; overflow: hidden; background: #ffffff; }
+.editor-highlight-layer, .editor-textarea { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 12px 16px; margin: 0; border: none; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px; line-height: 22px; tab-size: 2; box-sizing: border-box; overflow: auto; white-space: pre; }
+.editor-highlight-layer { pointer-events: none; color: #1e293b; z-index: 1; }
+.editor-textarea { background: transparent; color: transparent; caret-color: #0f172a; resize: none; outline: none; z-index: 2; }
+
+/* Resaltado de Sintaxis LaTeX */
+.tok-keyword { color: #7c3aed; font-weight: 700; }
+.tok-section { color: #0284c7; font-weight: 700; }
+.tok-command { color: #0d9488; font-weight: 600; }
+.tok-arg { color: #15803d; }
+.tok-opt { color: #b45309; }
+.tok-math { color: #b91c1c; font-style: italic; background: rgba(185, 28, 28, 0.05); }
+.tok-comment { color: #64748b; font-style: italic; }
+
+/* Visor PDF */
+.pdf-viewer-container { display: flex; flex-direction: column; height: 100%; width: 100%; background: #404448; }
+.pdf-toolbar { height: 40px; background: #2f3336; color: #e2e8f0; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-family: Arial, sans-serif; font-size: 12px; border-bottom: 1px solid #1e2124; flex-shrink: 0; user-select: none; }
+.pdf-toolbar-group { display: flex; align-items: center; gap: 8px; }
+.pdf-toolbar-title { font-weight: 600; color: #cbd5e1; }
+.pdf-toolbar-separator { width: 1px; height: 16px; background: #4a5157; margin: 0 4px; }
+.pdf-btn { background: #40454a; color: #f1f5f9; border: 1px solid #52585f; border-radius: 3px; padding: 3px 8px; font-size: 11px; cursor: pointer; transition: all 0.15s ease; }
+.pdf-btn:hover:not(:disabled) { background: #4f555c; }
+.pdf-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pdf-btn-action { background: #237052; border-color: #1d5f46; font-weight: 600; }
+.pdf-btn-action:hover { background: #1a563e; }
+.pdf-zoom-label { background: transparent; border: none; color: #cbd5e1; font-size: 11px; font-weight: 600; cursor: pointer; padding: 3px 6px; }
+.pdf-zoom-label:hover { color: #ffffff; text-decoration: underline; }
+.pdf-page-indicator { color: #cbd5e1; font-size: 11px; font-weight: 500; }
+
+.pdf-viewport { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #525659; }
+.pdf-frame-wrapper { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; }
+.pdf-stale-banner { background: #78350f; color: #fef3c7; font-family: Arial, sans-serif; font-size: 11px; font-weight: 600; padding: 5px 12px; text-align: center; border-bottom: 1px solid #92400e; z-index: 10; flex-shrink: 0; }
+.pdf-iframe { width: 100%; height: 100%; flex: 1; border: none; }
+.pdf-status-screen { text-align: center; color: #f1f5f9; padding: 40px 20px; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.pdf-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.8; }
+.pdf-status-text { font-size: 16px; font-weight: 600; margin: 0 0 6px 0; }
+.pdf-status-sub { font-size: 13px; color: #94a3b8; max-width: 320px; line-height: 1.4; margin-bottom: 16px; }
+.pdf-compile-cta-btn { background: #237052; color: #ffffff; border: none; border-radius: 4px; padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s ease; }
+.pdf-compile-cta-btn:hover { background: #1a563e; }
+.pdf-spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.3); border-top-color: #22c55e; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Consola de Compilación */
+.console-minimized { height: 32px; background: #1e1e1e; border-top: 1px solid #333333; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; cursor: pointer; font-family: Arial, sans-serif; font-size: 12px; color: #cccccc; flex-shrink: 0; user-select: none; }
+.console-min-left { display: flex; align-items: center; gap: 10px; }
+.console-icon { color: #888888; }
+.console-title { font-weight: 600; }
+.console-badge { font-size: 10px; padding: 1px 7px; border-radius: 10px; font-weight: 700; }
+.badge-err { background: #7f1d1d; color: #fecaca; }
+.badge-warn { background: #78350f; color: #fde68a; }
+.badge-ok { background: #14532d; color: #bbf7d0; }
+.console-toggle-btn { background: transparent; border: none; color: #9cdcfe; font-size: 11px; cursor: pointer; }
+
+.console-container { height: 190px; background: #181818; border-top: 2px solid #237052; display: flex; flex-direction: column; flex-shrink: 0; }
+.console-header { height: 36px; background: #222222; border-bottom: 1px solid #333333; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-family: Arial, sans-serif; user-select: none; }
+.console-tabs { display: flex; align-items: center; gap: 4px; height: 100%; }
+.console-tab { background: transparent; border: none; height: 100%; padding: 0 14px; font-size: 12px; color: #999999; cursor: pointer; display: flex; align-items: center; gap: 6px; border-bottom: 2px solid transparent; }
+.console-tab.active { color: #ffffff; font-weight: 600; border-bottom-color: #237052; background: #181818; }
+.console-tab-count { font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 700; }
+.console-tab-count.has-errors { background: #dc2626; color: #ffffff; }
+.console-tab-count.has-warnings { background: #d97706; color: #ffffff; }
+.console-actions { display: flex; align-items: center; gap: 14px; }
+.console-filters { display: flex; align-items: center; gap: 6px; }
+.filter-btn { background: #2a2a2a; border: 1px solid #404040; border-radius: 3px; color: #94a3b8; font-size: 11px; padding: 2px 8px; cursor: pointer; transition: all 0.15s ease; }
+.filter-btn:hover { background: #383838; color: #e2e8f0; }
+.filter-btn.active { background: #237052; border-color: #1a563e; color: #ffffff; font-weight: 600; }
+.console-time { font-size: 11px; color: #888888; font-family: 'Consolas', monospace; }
+.console-close-btn { background: transparent; border: none; color: #888888; font-size: 11px; cursor: pointer; }
+.console-close-btn:hover { color: #ffffff; }
+
+.console-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
+.console-issues-list { display: flex; flex-direction: column; gap: 8px; }
+.console-issue-item { background: #222222; border: 1px solid #333333; border-radius: 4px; padding: 8px 12px; cursor: pointer; transition: background 0.15s ease; position: relative; }
+.console-issue-item:hover { background: #2d2d2d; border-color: #444444; }
+.item-error { border-left: 3px solid #dc2626; }
+.item-warning { border-left: 3px solid #d97706; }
+.issue-meta { display: flex; align-items: center; gap: 10px; font-family: Arial, sans-serif; font-size: 11px; margin-bottom: 4px; }
+.issue-tag { font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 3px; }
+.tag-error { background: #dc2626; color: #ffffff; }
+.tag-warning { background: #d97706; color: #ffffff; }
+.issue-line-badge { background: #334155; color: #f8fafc; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-family: 'Consolas', monospace; border: 1px solid #475569; }
+.issue-line { color: #e2e8f0; font-weight: 700; font-family: 'Consolas', monospace; }
+.issue-file { color: #94a3b8; font-style: italic; }
+.issue-message { font-family: 'Consolas', monospace; font-size: 12px; color: #f8fafc; line-height: 1.4; word-break: break-word; }
+.issue-context { margin-top: 6px; background: #18181b; border-left: 2px solid #64748b; padding: 4px 8px; border-radius: 0 3px 3px 0; display: flex; align-items: baseline; gap: 8px; font-family: 'Consolas', monospace; font-size: 11px; }
+.issue-context-label { color: #94a3b8; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; }
+.issue-context-code { color: #e2e8f0; word-break: break-all; background: transparent; padding: 0; }
+.issue-friendly-explanation { margin-top: 8px; background: rgba(35, 112, 82, 0.18); border-left: 3px solid #22c55e; border-radius: 0 4px 4px 0; padding: 8px 12px; display: flex; align-items: flex-start; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 12px; line-height: 1.45; }
+.friendly-icon { font-size: 14px; line-height: 1.2; flex-shrink: 0; }
+.friendly-text { color: #86efac; font-weight: 500; }
+.issue-jump-hint { position: absolute; right: 12px; top: 10px; font-size: 10px; color: #38bdf8; opacity: 0.8; font-family: Arial, sans-serif; transition: opacity 0.15s ease, transform 0.15s ease; }
+.console-issue-item:hover .issue-jump-hint { opacity: 1; transform: translateX(2px); text-decoration: underline; }
+
+.console-empty { color: #86efac; font-family: Arial, sans-serif; font-size: 12px; padding: 12px 0; }
+.console-raw-log { font-family: 'Consolas', monospace; font-size: 11px; color: #94a3b8; }
+.raw-log-text { margin: 0; white-space: pre-wrap; line-height: 1.4; }
+
+/* Modales */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; z-index: 100; backdrop-filter: blur(2px); }
+.modal-dialog { background: #ffffff; border-radius: 6px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2), 0 10px 10px -5px rgba(0,0,0,0.04); width: 92%; max-width: 500px; padding: 24px; position: relative; border: 1px solid #d9d5cc; }
+.modal-dialog-lg { max-width: 780px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; border-bottom: 1px solid #eee; padding-bottom: 12px; }
+.modal-header h3 { margin: 0; font-family: Georgia, serif; font-size: 18px; color: #17392d; }
+.modal-close-btn { background: transparent; border: none; font-size: 16px; cursor: pointer; color: #888; }
+.modal-form { display: flex; flex-direction: column; gap: 14px; }
+.modal-field { display: flex; flex-direction: column; gap: 6px; }
+.modal-field label { font-family: Arial, sans-serif; font-size: 12px; font-weight: 600; color: #34423b; }
+.modal-field input { padding: 9px 12px; border: 1px solid #cbcfc8; border-radius: 4px; font-size: 13px; font-family: Arial, sans-serif; outline: none; }
+.modal-field input:focus { border-color: #237052; box-shadow: 0 0 0 2px #d4e6dc; }
+.modal-info { background: #f7f5f0; border-left: 3px solid #237052; padding: 8px 12px; font-size: 11px; color: #52625b; font-family: Arial, sans-serif; }
+.modal-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 8px 12px; border-radius: 4px; font-size: 12px; font-family: Arial, sans-serif; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+.modal-btn-cancel { background: #ffffff; border: 1px solid #cbcfc8; padding: 8px 16px; border-radius: 4px; font-size: 12px; font-weight: 600; color: #555; cursor: pointer; }
+.modal-btn-submit { background: #237052; border: 1px solid #1c5b42; padding: 8px 18px; border-radius: 4px; font-size: 12px; font-weight: 700; color: #ffffff; cursor: pointer; }
+.modal-btn-submit:hover { background: #1a563e; }
+
+.modal-search-box { margin-bottom: 14px; }
+.modal-search-input { width: 100%; padding: 9px 14px; border: 1px solid #cbcfc8; border-radius: 4px; font-size: 13px; font-family: Arial, sans-serif; box-sizing: border-box; }
+.modal-loading { text-align: center; padding: 30px 0; color: #718079; font-size: 13px; font-family: Arial, sans-serif; }
+.modal-empty-state { text-align: center; padding: 30px 0; color: #718079; font-size: 13px; font-family: Arial, sans-serif; }
+.docs-table-wrapper { max-height: 340px; overflow-y: auto; border: 1px solid #e5e2d8; border-radius: 4px; }
+.docs-table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px; }
+.docs-table th { background: #f7f5f0; padding: 9px 12px; text-align: left; color: #52625b; font-weight: 600; border-bottom: 1px solid #e5e2d8; }
+.docs-table td { padding: 9px 12px; border-bottom: 1px solid #f1eee8; color: #2d3748; }
+.doc-row { cursor: pointer; transition: background 0.15s ease; }
+.doc-row:hover { background: #f8faf9; }
+.doc-name-cell { display: flex; align-items: center; gap: 8px; }
+.table-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 8px; }
+.badge-neutral { background: #f1f5f9; color: #64748b; }
+.table-open-btn { background: #237052; color: #ffffff; border: none; border-radius: 3px; padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.table-open-btn:hover { background: #1a563e; }
+.modal-footer { margin-top: 14px; display: flex; justify-content: flex-end; }
+
+/* Menú emergente de Autocompletado LaTeX */
+.latex-suggestions-popup { position: absolute; z-index: 60; width: 340px; max-height: 260px; background: #252526; border: 1px solid #454545; border-radius: 6px; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; overflow: hidden; font-family: Arial, sans-serif; user-select: none; animation: fadeInPop 0.12s ease-out; }
+@keyframes fadeInPop { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+.suggestions-list { flex: 1; overflow-y: auto; padding: 4px 0; margin: 0; list-style: none; }
+.suggestion-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; cursor: pointer; font-size: 12px; color: #cccccc; transition: background 0.08s ease; gap: 8px; }
+.suggestion-item:hover, .suggestion-item.is-selected { background: #094771; color: #ffffff; }
+.sug-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sug-badge { font-family: 'Consolas', monospace; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; flex-shrink: 0; }
+.badge-cmd { background: #581c87; color: #e9d5ff; }
+.badge-env { background: #134e4a; color: #99f6e4; }
+.badge-snip { background: #1e3a8a; color: #bfdbfe; }
+.sug-label { font-family: 'Consolas', 'Courier New', monospace; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sug-desc { font-size: 11px; color: #888888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; text-align: right; flex-shrink: 0; }
+.suggestion-item.is-selected .sug-desc { color: #d1d5db; }
+.suggestions-footer { height: 24px; background: #1e1e1e; border-top: 1px solid #333333; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-size: 10px; color: #888888; }
+
