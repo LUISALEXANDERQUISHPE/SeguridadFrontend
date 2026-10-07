@@ -6,8 +6,9 @@ interface EditorToolbarProps {
   saveStatus: SaveStatus
   compileStatus: CompileStatus
   lastSavedAt: string | null
-  onNew: () => void
-  onOpen: () => void
+  // Opcionales: la gestión de proyectos (nuevo/abrir) vive en la barra lateral
+  onNew?: () => void
+  onOpen?: () => void
   onSave: () => void
   onCompile: () => void
   onDownloadPdf: () => void
@@ -96,23 +97,27 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 
       {/* Botones de acción principales */}
       <div className="toolbar-actions">
-        <button
-          type="button"
-          className="toolbar-btn btn-secondary"
-          onClick={onNew}
-          title="Crear un nuevo documento LaTeX"
-        >
-          ➕ Nuevo
-        </button>
+        {onNew && (
+          <button
+            type="button"
+            className="toolbar-btn btn-secondary"
+            onClick={onNew}
+            title="Crear un nuevo documento LaTeX"
+          >
+            ➕ Nuevo
+          </button>
+        )}
 
-        <button
-          type="button"
-          className="toolbar-btn btn-secondary"
-          onClick={onOpen}
-          title="Abrir un documento existente"
-        >
-          📂 Abrir
-        </button>
+        {onOpen && (
+          <button
+            type="button"
+            className="toolbar-btn btn-secondary"
+            onClick={onOpen}
+            title="Abrir un documento existente"
+          >
+            📂 Abrir
+          </button>
+        )}
 
         <button
           type="button"
