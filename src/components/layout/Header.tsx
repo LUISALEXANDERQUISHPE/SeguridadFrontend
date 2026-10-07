@@ -27,22 +27,24 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="brand-mark">S</div>
           <span className="brand-name">Secureleaf</span>
         </div>
-        <nav className="header-nav">
-          <button
-            type="button"
-            className={`nav-link ${currentPage === 'home' ? 'active' : ''}`}
-            onClick={() => onNavigate?.('home')}
-          >
-            Inicio
-          </button>
-          <button
-            type="button"
-            className={`nav-link ${currentPage === 'editor' ? 'active' : ''}`}
-            onClick={() => onNavigate?.('editor')}
-          >
-            Editor
-          </button>
-        </nav>
+        {onNavigate && (
+          <nav className="header-nav">
+            <button
+              type="button"
+              className={`nav-link ${currentPage === 'home' ? 'active' : ''}`}
+              onClick={() => onNavigate('home')}
+            >
+              Inicio
+            </button>
+            <button
+              type="button"
+              className={`nav-link ${currentPage === 'editor' ? 'active' : ''}`}
+              onClick={() => onNavigate('editor')}
+            >
+              Editor
+            </button>
+          </nav>
+        )}
       </div>
       {authenticated && (
         <div className="header-account">
