@@ -7,23 +7,27 @@ import type {
 } from '../../types/document'
 import {
   compileDocument,
-  createDocument,
   DEFAULT_LATEX_TEMPLATE,
   downloadPdfFile,
   downloadSourceFile,
   getDocument,
-  getDocuments,
   saveDocument,
 } from '../../services/documentService'
 import LatexCodeEditor from './components/LatexCodeEditor'
 import PdfViewer from './components/PdfViewer'
 import CompilationConsole from './components/CompilationConsole'
 import EditorToolbar from './components/EditorToolbar'
-import { NewDocumentModal, OpenDocumentModal } from './components/DocumentModals'
 
-export const EditorPage: React.FC = () => {
+interface EditorPageProps {
+  // Documento a editar; el editor solo se muestra al crear o abrir un proyecto desde la barra lateral
+  documentId: string
+}
+
+export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
   // Estado del Documento
   const [currentDocument, setCurrentDocument] = useState<LatexDocument | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [content, setContent] = useState<string>(DEFAULT_LATEX_TEMPLATE)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
@@ -42,13 +46,10 @@ export const EditorPage: React.FC = () => {
   const [targetLine, setTargetLine] = useState<number | null>(null)
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false)
 
-  // Modales
-  const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false)
-  const [isOpenModalOpen, setIsOpenModalOpen] = useState<boolean>(false)
-
   // Redimensionamiento de paneles
   const [splitPercent, setSplitPercent] = useState<number>(50)
   const [isDragging, setIsDragging] = useState<boolean>(false)
+  const splitContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Referencias para debounce y control de cambios
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -56,36 +57,36 @@ export const EditorPage: React.FC = () => {
   const contentRef = useRef<string>(content)
   contentRef.current = content
 
-  // 1. Cargar documentos al inicio si existen, o preparar documento por defecto
+  // 1. Cargar el documento del proyecto abierto
   useEffect(() => {
     let mounted = true
 
-    const initDocuments = async () => {
+    const initDocument = async () => {
       try {
-        const docs = await getDocuments()
-        if (docs.length > 0 && mounted) {
-          // Abrir el documento más reciente
-          const firstDoc = docs[0]
-          const docData = await getDocument(firstDoc.id)
-          if (mounted) {
-            setCurrentDocument(docData)
-            const initialContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
-            setContent(initialContent)
-            setSaveStatus('saved')
-            if (docData.lastCompilation?.hasPdf && docData.lastCompilation.pdfUrl) {
-              setPdfUrl(docData.lastCompilation.pdfUrl)
-              setPreviousPdfUrl(docData.lastCompilation.pdfUrl)
-              setCompileStatus('success')
-              setCompileTimestamp(Date.now())
-            } else {
-              setPdfUrl(null)
-              setPreviousPdfUrl(null)
-              setCompileStatus(docData.lastCompilation?.status === 'fallida' ? 'failed' : 'idle')
-            }
+        const docData = await getDocument(documentId)
+        if (mounted) {
+          setCurrentDocument(docData)
+          const initialContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
+          setContent(initialContent)
+          setSaveStatus('saved')
+          setLastSavedAt(docData.updatedAt ? new Date(docData.updatedAt).toLocaleTimeString() : null)
+          if (docData.lastCompilation?.hasPdf && docData.lastCompilation.pdfUrl) {
+            setPdfUrl(docData.lastCompilation.pdfUrl)
+            setPreviousPdfUrl(docData.lastCompilation.pdfUrl)
+            setCompileStatus('success')
+            setCompileTimestamp(Date.now())
+          } else {
+            setPdfUrl(null)
+            setPreviousPdfUrl(null)
+            setCompileStatus(docData.lastCompilation?.status === 'fallida' ? 'failed' : 'idle')
           }
+          setIsLoading(false)
         }
-      } catch {
-        // Si no hay documentos o falla, se mantiene la plantilla inicial
+      } catch (err: unknown) {
+        if (mounted) {
+          setLoadError(err instanceof Error ? err.message : 'Error al abrir el proyecto')
+          setIsLoading(false)
+        }
       } finally {
         setTimeout(() => {
           isInitialLoadRef.current = false
@@ -93,13 +94,18 @@ export const EditorPage: React.FC = () => {
       }
     }
 
-    void initDocuments()
+    void initDocument()
 
     return () => {
       mounted = false
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current)
+      // Si quedó un autoguardado pendiente al cerrar o cambiar de proyecto, enviarlo de inmediato
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+        autoSaveTimerRef.current = null
+        saveDocument(documentId, contentRef.current, true).catch(() => {})
+      }
     }
-  }, [])
+  }, [documentId])
 
   // 2. Manejo de Autoguardado con Debounce (isAutoSave: true)
   const triggerAutoSave = useCallback((docId: string, textToSave: string) => {
@@ -110,6 +116,7 @@ export const EditorPage: React.FC = () => {
     setSaveStatus('unsaved')
 
     autoSaveTimerRef.current = setTimeout(async () => {
+      autoSaveTimerRef.current = null
       setSaveStatus('saving')
       try {
         const res = await saveDocument(docId, textToSave, true)
@@ -135,15 +142,13 @@ export const EditorPage: React.FC = () => {
     // 1. Obtener el contenido actual del editor
     const currentText = contentRef.current
 
-    if (!currentDocument?.id) {
-      // Si el documento es nuevo y no tiene ID, solicitar crearlo
-      setIsNewModalOpen(true)
-      return
-    }
+    // Sin un proyecto cargado no hay nada que guardar
+    if (!currentDocument?.id) return
 
     // Cancelar debounce previo de autoguardado
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
     }
 
     // 2. Paso 1: Guardar documento en Backend con isAutoSave: false
@@ -219,10 +224,7 @@ export const EditorPage: React.FC = () => {
   const handleCompile = async () => {
     if (compileStatus === 'compiling') return
 
-    if (!currentDocument?.id) {
-      setIsNewModalOpen(true)
-      return
-    }
+    if (!currentDocument?.id) return
 
     const currentText = contentRef.current
     setCompileStatus('compiling')
@@ -267,79 +269,7 @@ export const EditorPage: React.FC = () => {
     }
   }
 
-  // 5. Crear Nuevo Documento
-  const handleCreateDocument = async (name: string, description: string) => {
-    const res = await createDocument({
-      name,
-      content: contentRef.current || DEFAULT_LATEX_TEMPLATE,
-      description,
-    })
-
-    const newDoc = res.document
-    setCurrentDocument(newDoc)
-    setContent(newDoc.content || DEFAULT_LATEX_TEMPLATE)
-    setSaveStatus('saved')
-    setLastSavedAt(new Date().toLocaleTimeString())
-    setPdfUrl(null)
-    setPreviousPdfUrl(null)
-    setErrors([])
-    setWarnings([])
-
-    // Compilar inmediatamente el documento creado
-    setCompileStatus('compiling')
-    try {
-      const compRes = await compileDocument(newDoc.id, newDoc.content)
-      setCompilationLog(compRes.log || '')
-      setCompilationTime(compRes.compilationTime)
-      setErrors(compRes.errors || [])
-      setWarnings(compRes.warnings || [])
-      if (compRes.success) {
-        setCompileStatus('success')
-        if (compRes.pdfUrl) {
-          setPdfUrl(compRes.pdfUrl)
-          setPreviousPdfUrl(compRes.pdfUrl)
-        }
-        setCompileTimestamp(Date.now())
-      } else {
-        console.log('[PDF] solicitud omitida porque success=false')
-        setCompileStatus('failed')
-        setPreviousPdfUrl(compRes.previousPdfUrl || null)
-        if (!compRes.previousPdfUrl) {
-          setPdfUrl(null)
-        }
-        setIsConsoleOpen(true)
-      }
-    } catch {
-      console.log('[PDF] solicitud omitida porque success=false')
-      setCompileStatus('failed')
-    }
-  }
-
-  // 6. Abrir Documento Existente
-  const handleOpenDocument = async (id: string) => {
-    const docData = await getDocument(id)
-    setCurrentDocument(docData)
-    const openedContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
-    setContent(openedContent)
-    setSaveStatus('saved')
-    setLastSavedAt(docData.updatedAt ? new Date(docData.updatedAt).toLocaleTimeString() : null)
-    setErrors([])
-    setWarnings([])
-    setCompilationLog('')
-
-    if (docData.lastCompilation?.hasPdf && docData.lastCompilation.pdfUrl) {
-      setPdfUrl(docData.lastCompilation.pdfUrl)
-      setPreviousPdfUrl(docData.lastCompilation.pdfUrl)
-      setCompileStatus('success')
-      setCompileTimestamp(Date.now())
-    } else {
-      setPdfUrl(null)
-      setPreviousPdfUrl(null)
-      setCompileStatus(docData.lastCompilation?.status === 'fallida' ? 'failed' : 'idle')
-    }
-  }
-
-  // 7. Descargas
+  // 5. Descargas
   const handleDownloadPdf = () => {
     if (!currentDocument?.id) return
     if (!pdfUrl && !previousPdfUrl) {
@@ -357,7 +287,7 @@ export const EditorPage: React.FC = () => {
     void downloadSourceFile(currentDocument.id, currentDocument.name, content)
   }
 
-  // 8. Navegación a la línea seleccionada en la consola
+  // 6. Navegación a la línea seleccionada en la consola
   const handleErrorClick = useCallback((line: number) => {
     setTargetLine(null)
     setTimeout(() => {
@@ -369,7 +299,7 @@ export const EditorPage: React.FC = () => {
     setTargetLine(null)
   }, [])
 
-  // 9. Manejo de redimensionamiento de paneles (Split Drag)
+  // 7. Manejo de redimensionamiento de paneles (Split Drag)
   const handleMouseDown = () => {
     setIsDragging(true)
   }
@@ -377,8 +307,9 @@ export const EditorPage: React.FC = () => {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return
-      const containerWidth = window.innerWidth
-      const newPercent = Math.min(Math.max(25, (e.clientX / containerWidth) * 100), 75)
+      const container = splitContainerRef.current?.getBoundingClientRect()
+      if (!container || container.width === 0) return
+      const newPercent = Math.min(Math.max(25, ((e.clientX - container.left) / container.width) * 100), 75)
       setSplitPercent(newPercent)
     }
 
@@ -397,6 +328,18 @@ export const EditorPage: React.FC = () => {
     }
   }, [isDragging])
 
+  if (isLoading || loadError) {
+    return (
+      <div className="overleaf-editor-root editor-status-screen">
+        {loadError ? (
+          <div className="modal-error">No fue posible abrir el proyecto: {loadError}</div>
+        ) : (
+          <div className="modal-loading">Cargando proyecto...</div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="overleaf-editor-root">
       {/* Barra de herramientas superior */}
@@ -405,8 +348,6 @@ export const EditorPage: React.FC = () => {
         saveStatus={saveStatus}
         compileStatus={compileStatus}
         lastSavedAt={lastSavedAt}
-        onNew={() => setIsNewModalOpen(true)}
-        onOpen={() => setIsOpenModalOpen(true)}
         onSave={() => void handleSaveAndCompile()}
         onCompile={() => void handleCompile()}
         onDownloadPdf={handleDownloadPdf}
@@ -416,7 +357,7 @@ export const EditorPage: React.FC = () => {
       />
 
       {/* Espacio de trabajo dividido (Editor + Separador + Visor PDF) */}
-      <div className="overleaf-split-container">
+      <div className="overleaf-split-container" ref={splitContainerRef}>
         {/* Panel Izquierdo: Editor LaTeX */}
         <div
           className="overleaf-panel panel-left"
@@ -468,19 +409,6 @@ export const EditorPage: React.FC = () => {
         onErrorClick={handleErrorClick}
         isOpen={isConsoleOpen}
         onToggleOpen={() => setIsConsoleOpen((prev) => !prev)}
-      />
-
-      {/* Modales */}
-      <NewDocumentModal
-        isOpen={isNewModalOpen}
-        onClose={() => setIsNewModalOpen(false)}
-        onCreate={handleCreateDocument}
-      />
-
-      <OpenDocumentModal
-        isOpen={isOpenModalOpen}
-        onClose={() => setIsOpenModalOpen(false)}
-        onSelectDocument={handleOpenDocument}
       />
     </div>
   )
