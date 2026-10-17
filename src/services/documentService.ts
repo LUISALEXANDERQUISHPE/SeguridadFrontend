@@ -7,6 +7,7 @@ import type {
   GetDocumentsResponse,
   LatexDocument,
   SaveDocumentResponse,
+  ProjectNode,
 } from '../types/document'
 
 export const DEFAULT_LATEX_TEMPLATE = `\\documentclass[12pt,a4paper]{article}
@@ -105,6 +106,58 @@ export async function getDocument(id: string): Promise<LatexDocument> {
     method: 'GET',
   })
   return response.document
+}
+
+export async function getProjectTree(projectId: string): Promise<{ nodes: ProjectNode[]; role: string }> {
+  const response = await requestWithAuth<{ nodes: ProjectNode[]; role: string }>(`/documents/project/${projectId}/tree`)
+  return response
+}
+
+export async function createProjectNode(
+  projectId: string,
+  data: { name: string; nodeType: 'archivo' | 'carpeta'; parentId?: string | null; content?: string; dataBase64?: string; mimeType?: string }
+): Promise<ProjectNode> {
+  const response = await requestWithAuth<{ node: ProjectNode }>(`/documents/project/${projectId}/nodes`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+  return response.node
+}
+
+export async function renameProjectNode(projectId: string, nodeId: string, name: string): Promise<ProjectNode> {
+  const response = await requestWithAuth<{ node: ProjectNode }>(`/documents/project/${projectId}/nodes/${nodeId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+  return response.node
+}
+
+export async function moveProjectNode(projectId: string, nodeId: string, parentId: string | null, order: number): Promise<ProjectNode> {
+  const response = await requestWithAuth<{ node: ProjectNode }>(`/documents/project/${projectId}/nodes/${nodeId}/move`, {
+    method: 'PATCH',
+    body: JSON.stringify({ parentId, order }),
+  })
+  return response.node
+}
+
+export async function deleteProjectNode(projectId: string, nodeId: string): Promise<void> {
+  await requestWithAuth(`/documents/project/${projectId}/nodes/${nodeId}`, { method: 'DELETE' })
+}
+
+export async function downloadProjectNode(projectId: string, node: ProjectNode): Promise<void> {
+  const token = getAuthToken()
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+  const response = await fetch(`${BASE_URL}/documents/project/${projectId}/nodes/${node.id}/download`, { headers })
+  if (!response.ok) throw new Error('No fue posible descargar el archivo')
+  const blob = await response.blob()
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = node.nombre
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(url)
 }
 
 /**
