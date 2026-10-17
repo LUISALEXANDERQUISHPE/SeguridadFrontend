@@ -157,6 +157,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
     }
   }
 
+  const handleInsertText = (text: string) => {
+    const editor = document.querySelector<HTMLTextAreaElement>('.editor-textarea')
+    const currentText = contentRef.current
+    const start = editor?.selectionStart ?? currentText.length
+    const end = editor?.selectionEnd ?? start
+    const nextContent = `${currentText.slice(0, start)}${text}${currentText.slice(end)}`
+
+    handleContentChange(nextContent)
+
+    if (editor) {
+      const cursorPosition = start + text.length
+      requestAnimationFrame(() => {
+        editor.focus()
+        editor.setSelectionRange(cursorPosition, cursorPosition)
+      })
+    }
+  }
+
   // 3. Guardado Manual y Compilación Integrada (Ctrl+S / Cmd+S o Botón Guardar)
   const handleSaveAndCompile = useCallback(async () => {
     // 1. Obtener el contenido actual del editor
@@ -372,6 +390,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
         onCompile={() => void handleCompile()}
         onDownloadPdf={handleDownloadPdf}
         onDownloadSource={handleDownloadSource}
+        onInsertText={handleInsertText}
+        onToggleConsole={() => setIsConsoleOpen((previous) => !previous)}
         isCompiling={compileStatus === 'compiling'}
         isSaving={saveStatus === 'saving'}
       />

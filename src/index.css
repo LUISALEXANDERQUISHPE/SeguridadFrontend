@@ -56,13 +56,25 @@ button, input { font: inherit; }
 .overleaf-editor-root { display: flex; flex-direction: column; height: calc(100vh - 120px); width: 100%; background: #fdfdfd; position: relative; overflow: hidden; }
 
 /* Barra Superior de Herramientas */
-.editor-top-toolbar { height: 50px; position: relative; display: flex; align-items: flex-start; gap: 18px; padding: 8px 14px 0; color: #f1f5f9; background: #172231; border-top: 2px solid #237052; border-bottom: 1px solid #334155; flex-shrink: 0; user-select: none; font-family: Arial, sans-serif; }
+.editor-top-toolbar { height: 50px; position: relative; display: flex; align-items: center; gap: 18px; padding: 0 14px; color: #f1f5f9; background: #172231; border-top: 2px solid #237052; border-bottom: 1px solid #334155; flex-shrink: 0; user-select: none; font-family: Arial, sans-serif; }
 .editor-brand { display: flex; align-items: center; gap: 7px; min-width: 128px; height: 32px; }
 .editor-brand .brand-mark { width: 28px; height: 28px; font-size: 17px; }
 .editor-brand-name { color: #f8fafc; font-size: 15px; font-weight: 700; }
-.editor-menu-links { display: flex; gap: 18px; align-items: center; height: 32px; color: #cbd5e1; font-size: 12px; }
-.editor-menu-links span { cursor: default; }
-.editor-project-name { margin-left: auto; height: 32px; display: flex; align-items: center; gap: 6px; color: #e2e8f0; font-size: 12px; font-weight: 600; }
+.editor-menu-links { display: flex; gap: 2px; align-items: center; height: 32px; color: #cbd5e1; font-size: 14px; }
+.editor-menu-dropdown { position: relative; height: 32px; }
+.editor-menu-trigger { height: 32px; padding: 0 10px; border: 0; border-radius: 4px; color: #e2e8f0; background: transparent; font-size: 14px; cursor: pointer; }
+.editor-menu-trigger:hover, .editor-menu-trigger.is-active { color: #fff; background: #263548; }
+.editor-menu-panel { position: absolute; top: 34px; left: 0; z-index: 50; min-width: 210px; padding: 5px; border: 1px solid #475569; border-radius: 5px; background: #1e293b; box-shadow: 0 10px 24px rgba(2, 6, 23, .35); }
+.editor-menu-item { display: block; width: 100%; padding: 8px 11px; border: 0; border-radius: 3px; color: #e2e8f0; background: transparent; text-align: left; font-size: 13px; cursor: pointer; }
+.editor-menu-item:hover:not(:disabled) { color: #fff; background: #31506f; }
+.editor-menu-item:disabled { color: #64748b; cursor: not-allowed; }
+.editor-project-name { flex: 1; min-width: 90px; max-width: 310px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: 32px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #e2e8f0; font-size: 13px; font-weight: 600; }
+.editor-toolbar-quick-actions { display: flex; align-items: center; gap: 7px; margin-left: auto; white-space: nowrap; }
+.toolbar-status { display: inline-flex; }
+.toolbar-quick-btn, .toolbar-share-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 8px; border: 0; border-radius: 4px; color: #e2e8f0; background: transparent; font-size: 13px; cursor: pointer; }
+.toolbar-quick-btn:hover { background: #263548; color: #fff; }
+.toolbar-share-btn { padding: 0 14px; color: #fff; background: #07883f; font-weight: 700; border-radius: 16px; }
+.toolbar-share-btn:hover { background: #0a9f4c; }
 .editor-toolbar-actions { height: 32px; }
 .editor-top-toolbar .toolbar-btn { color: #e2e8f0; background: #263548; border-color: #475569; }
 .editor-top-toolbar .btn-compile { color: #fff; background: #237052; border-color: #1c5b42; }

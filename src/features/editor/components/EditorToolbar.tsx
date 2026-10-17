@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import type { CompileStatus, SaveStatus } from '../../../types/document'
 
 interface EditorToolbarProps {
@@ -14,6 +14,8 @@ interface EditorToolbarProps {
   onCompile: () => void
   onDownloadPdf: () => void
   onDownloadSource: () => void
+  onInsertText?: (text: string) => void
+  onToggleConsole?: () => void
   isCompiling: boolean
   isSaving: boolean
 }
@@ -30,10 +32,42 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onCompile,
   onDownloadPdf,
   onDownloadSource,
+  onInsertText,
+  onToggleConsole,
   isCompiling,
   isSaving,
 }) => {
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+  const [activeMenu, setActiveMenu] = useState<string | null>(null)
+
+  useEffect(() => {
+    const closeMenus = () => {
+      setActiveMenu(null)
+      setShowDownloadMenu(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenus()
+    }
+    window.addEventListener('click', closeMenus)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', closeMenus)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
+  const menuAction = (action: () => void) => {
+    setActiveMenu(null)
+    setShowDownloadMenu(false)
+    action()
+  }
+
+  const insert = (text: string) => menuAction(() => onInsertText?.(text))
+  const editCommand = (command: 'undo' | 'redo' | 'selectAll') => menuAction(() => {
+    const editor = document.querySelector<HTMLTextAreaElement>('.editor-textarea')
+    editor?.focus()
+    document.execCommand(command)
+  })
 
   const renderStatusBadges = () => {
     if (saveStatus === 'saving') {
@@ -85,105 +119,101 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   }
 
   return (
-    <div className="editor-top-toolbar">
+    <div className="editor-top-toolbar" onClick={(event) => event.stopPropagation()}>
       <div className="editor-brand">
         <div className="brand-mark">S</div>
         <span className="editor-brand-name">Secureleaf</span>
       </div>
-      <div className="editor-menu-links"><span>Archivo</span><span>Editar</span><span>Insertar</span><span>Ver</span><span>Ayuda</span></div>
-      <div className="editor-project-name">{documentName || 'Documento sin título'} <span>⌄</span></div>
-      <div className="toolbar-actions editor-toolbar-actions">
-
-        {onNew && (
-          <button
-            type="button"
-            className="toolbar-btn btn-secondary"
-            onClick={onNew}
-            title="Crear un nuevo documento LaTeX"
-          >
-            ➕ Nuevo
-          </button>
-        )}
-
-        {onOpen && (
-          <button
-            type="button"
-            className="toolbar-btn btn-secondary"
-            onClick={onOpen}
-            title="Abrir un documento existente"
-          >
-            📂 Abrir
-          </button>
-        )}
-
-        <button
-          type="button"
-          className="toolbar-btn btn-secondary"
-          onClick={onSave}
-          disabled={isSaving}
-          title="Guardar versión formal (Ctrl+S)"
-        >
-          💾 Guardar
+      <nav className="editor-menu-links" aria-label="Menú del editor">
+        {[
+          {
+            label: 'Archivo',
+            items: [
+              ['Nuevo documento', onNew],
+              ['Abrir documento', onOpen],
+              ['Guardar', onSave],
+              ['Recompilar', onCompile],
+              ['Descargar PDF', onDownloadPdf],
+              ['Descargar código fuente', onDownloadSource],
+            ],
+          },
+          {
+            label: 'Editar',
+            items: [
+              ['Deshacer', () => editCommand('undo')],
+              ['Rehacer', () => editCommand('redo')],
+              ['Seleccionar todo', () => editCommand('selectAll')],
+            ],
+          },
+          {
+            label: 'Insertar',
+            items: [
+              ['Sección', () => insert('\\section{Título}\\n')],
+              ['Subsección', () => insert('\\subsection{Título}\\n')],
+              ['Ecuación', () => insert('\\begin{equation}\\n  \\n\\end{equation}\\n')],
+              ['Tabla', () => insert('\\begin{table}\\n  \\centering\\n\\end{table}\\n')],
+              ['Imagen', () => insert('\\includegraphics[width=\\\\textwidth]{archivo}\\n')],
+            ],
+          },
+          {
+            label: 'Ver',
+            items: [
+              ['Consola de compilación', onToggleConsole],
+              ['Recompilar PDF', onCompile],
+            ],
+          },
+          {
+            label: 'Formato',
+            items: [
+              ['Texto en negrita', () => insert('\\textbf{texto}')],
+              ['Texto en cursiva', () => insert('\\textit{texto}')],
+              ['Lista', () => insert('\\begin{itemize}\\n  \\item Elemento\\n\\end{itemize}\\n')],
+            ],
+          },
+          {
+            label: 'Ayuda',
+            items: [
+              ['Atajos de teclado', () => window.open('https://www.overleaf.com/learn/latex/TeX_keyboard_shortcuts', '_blank', 'noopener,noreferrer')],
+              ['Documentación de LaTeX', () => window.open('https://www.overleaf.com/learn/latex', '_blank', 'noopener,noreferrer')],
+            ],
+          },
+        ].map((menu) => (
+          <div className="editor-menu-dropdown" key={menu.label}>
+            <button
+              type="button"
+              className={`editor-menu-trigger ${activeMenu === menu.label ? 'is-active' : ''}`}
+              onClick={() => setActiveMenu((previous) => previous === menu.label ? null : menu.label)}
+            >
+              {menu.label}
+            </button>
+            {activeMenu === menu.label && (
+              <div className="editor-menu-panel">
+                {menu.items.map(([label, action]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="editor-menu-item"
+                    disabled={!action || (label === 'Recompilar' && isCompiling) || (label === 'Guardar' && isSaving)}
+                    onClick={() => menuAction(action || (() => undefined))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </nav>
+      <div className="editor-project-name" title={documentName}>{documentName || 'Documento sin título'} <span>⌄</span></div>
+      <div className="editor-toolbar-quick-actions">
+        <span className="toolbar-status">{renderStatusBadges()}</span>
+        <button type="button" className="toolbar-quick-btn" onClick={() => onCompile()} disabled={isCompiling} title="Recompilar">
+          {isCompiling ? <span className="btn-spinner" /> : '▶'}
         </button>
-
-        <span className="toolbar-divider" />
-
-        {/* Botón principal de compilación */}
-        <button
-          type="button"
-          className="toolbar-btn btn-compile"
-          onClick={onCompile}
-          disabled={isCompiling}
-          title="Compilar código LaTeX a PDF (con pdflatex)"
-        >
-          {isCompiling ? (
-            <>
-              <span className="btn-spinner" />
-              Compilando...
-            </>
-          ) : (
-            <>▶ Recompilar</>
-          )}
-        </button>
-
-        <span className="toolbar-divider" />
-
-        {/* Menú de Descargas */}
-        <div className="toolbar-dropdown-container">
-          <button
-            type="button"
-            className="toolbar-btn btn-secondary"
-            onClick={() => setShowDownloadMenu((prev) => !prev)}
-            title="Opciones de descarga"
-          >
-            ⬇ Descargar ▾
-          </button>
-
-          {showDownloadMenu && (
-            <div className="toolbar-dropdown-menu">
-              <button
-                type="button"
-                className="dropdown-item"
-                onClick={() => {
-                  setShowDownloadMenu(false)
-                  onDownloadPdf()
-                }}
-              >
-                📕 Descargar PDF compilado
-              </button>
-              <button
-                type="button"
-                className="dropdown-item"
-                onClick={() => {
-                  setShowDownloadMenu(false)
-                  onDownloadSource()
-                }}
-              >
-                📄 Descargar código fuente (.tex)
-              </button>
-            </div>
-          )}
-        </div>
+        <button type="button" className="toolbar-quick-btn" onClick={onDownloadPdf} title="Descargar PDF">↓</button>
+        <button type="button" className="toolbar-quick-btn" title="Historial">◷ <span>Historial</span></button>
+        <button type="button" className="toolbar-quick-btn" title="Distribución">▣ <span>Diseño</span></button>
+        <button type="button" className="toolbar-share-btn" title="Compartir">♣ <span>Compartir</span></button>
       </div>
     </div>
   )
