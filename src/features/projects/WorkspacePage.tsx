@@ -29,18 +29,23 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({ displayName }) => 
 
   return (
     <div className="workspace-root">
-      <ProjectsSidebar
-        openDocumentId={openDocumentId}
-        isCreateOpen={isCreateOpen}
-        onCreateOpenChange={setIsCreateOpen}
-        onOpenProject={setOpenDocumentId}
-        onProjectUpdated={handleProjectUpdated}
-        onProjectClosed={handleProjectClosed}
-      />
+      {!openDocumentId && (
+        <ProjectsSidebar
+          openDocumentId={openDocumentId}
+          isCreateOpen={isCreateOpen}
+          onCreateOpenChange={setIsCreateOpen}
+          onOpenProject={setOpenDocumentId}
+          onProjectUpdated={handleProjectUpdated}
+          onProjectClosed={handleProjectClosed}
+        />
+      )}
 
       <div className="workspace-main">
         {openDocumentId ? (
-          <EditorPage key={`${openDocumentId}-${editorReloadKey}`} documentId={openDocumentId} />
+          <EditorPage
+            documentId={openDocumentId}
+            onDocumentOpen={setOpenDocumentId}
+          />
         ) : (
           <section className="workspace-empty">
             <span className="eyebrow">Sesión activa</span>
