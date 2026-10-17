@@ -15,6 +15,10 @@ interface LatexCodeEditorProps {
   targetLine?: number | null
   onLineFocused?: () => void
   readOnly?: boolean
+  documentId?: string
+  openTabs?: Array<{ id: string; name: string }>
+  onOpenTab?: (id: string) => void
+  onCloseTab?: (id: string) => void
 }
 
 // Resaltador de sintaxis LaTeX básico y rápido para el backdrop
@@ -73,6 +77,10 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
   targetLine = null,
   onLineFocused,
   readOnly = false,
+  documentId,
+  openTabs = [],
+  onOpenTab,
+  onCloseTab,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
@@ -499,6 +507,19 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
             <span>↑↓: navegar</span>
             <span>Esc: cerrar</span>
           </div>
+        </div>
+      )}
+
+      {openTabs.length > 0 && (
+        <div className="editor-tabs editor-tabs-in-panel" role="tablist" aria-label="Archivos abiertos">
+          {openTabs.map((tab) => (
+            <div key={tab.id} className={`editor-file-tab-path ${tab.id === documentId ? 'active' : ''}`}>
+              <button type="button" onClick={() => onOpenTab?.(tab.id)} role="tab" aria-selected={tab.id === documentId}>
+                <span className="editor-tab-file-icon">▧</span>{tab.name}
+              </button>
+              <button type="button" className="editor-tab-close" onClick={() => onCloseTab?.(tab.id)} aria-label={`Cerrar ${tab.name}`}>×</button>
+            </div>
+          ))}
         </div>
       )}
 
