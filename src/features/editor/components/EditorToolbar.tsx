@@ -3,6 +3,7 @@ import type { CompileStatus, SaveStatus } from '../../../types/document'
 
 interface EditorToolbarProps {
   documentName: string
+  documentId: string
   saveStatus: SaveStatus
   compileStatus: CompileStatus
   lastSavedAt: string | null
@@ -19,6 +20,7 @@ interface EditorToolbarProps {
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   documentName,
+  documentId,
   saveStatus,
   compileStatus,
   lastSavedAt,
@@ -84,19 +86,14 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 
   return (
     <div className="editor-top-toolbar">
-      {/* Información del documento */}
-      <div className="toolbar-doc-info">
-        <div className="doc-icon">📄</div>
-        <div className="doc-title-box">
-          <span className="doc-title">{documentName || 'Documento sin título'}</span>
-          <div className="doc-badges">
-            {renderStatusBadges()}
-          </div>
-        </div>
+      <div className="editor-brand">
+        <div className="brand-mark">S</div>
+        <span className="editor-brand-name">Secureleaf</span>
       </div>
+      <div className="editor-menu-links"><span>Archivo</span><span>Editar</span><span>Insertar</span><span>Ver</span><span>Ayuda</span></div>
+      <div className="editor-project-name">{documentName || 'Documento sin título'} <span>⌄</span></div>
+      <div className="toolbar-actions editor-toolbar-actions">
 
-      {/* Botones de acción principales */}
-      <div className="toolbar-actions">
         {onNew && (
           <button
             type="button"

@@ -9,6 +9,7 @@ interface FileExplorerProps {
   currentContent: string
   outlineVersion: number
   onOpenDocument: (id: string) => void
+  onDocumentDeleted: (id: string) => void
   onDocumentRenamed: (id: string, name: string) => void
   onNavigateToLine: (line: number) => void
 }
@@ -34,7 +35,7 @@ const Icon: React.FC<{ name: IconName; size?: number }> = ({ name, size = 16 }) 
   return <svg className="file-icon" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
-export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDocumentId, currentContent, outlineVersion, onOpenDocument, onDocumentRenamed, onNavigateToLine }) => {
+export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDocumentId, currentContent, outlineVersion, onOpenDocument, onDocumentDeleted, onDocumentRenamed, onNavigateToLine }) => {
   const [nodes, setNodes] = useState<ProjectNode[]>([])
   const [collapsed, setCollapsed] = useState(false)
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
@@ -141,6 +142,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
       })
     }
     const nextNodes = await reload()
+    deletedIds.forEach((deletedId) => onDocumentDeleted(deletedId))
     if (deletedIds.has(currentDocumentId)) {
       const nextDocument = nextNodes.find((candidate) =>
         candidate.tipo_nodo === 'archivo' &&

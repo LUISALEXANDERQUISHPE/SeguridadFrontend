@@ -21,13 +21,19 @@ import FileExplorer from './components/FileExplorer'
 
 interface EditorPageProps {
   // Documento a editar; el editor solo se muestra al crear o abrir un proyecto desde la barra lateral
-  documentId: string
+  documentId: string | null
+  projectId: string | null
   onDocumentOpen?: (documentId: string) => void
+  onDocumentDeleted?: (documentId: string) => void
+  openTabs: Array<{ id: string; name: string }>
+  onCloseTab: (documentId: string) => void
+  onDocumentNameLoaded: (documentId: string, name: string) => void
 }
 
-export const EditorPage: React.FC<EditorPageProps> = ({ documentId, onDocumentOpen }) => {
+export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, onDocumentOpen, onDocumentDeleted, openTabs, onCloseTab, onDocumentNameLoaded }) => {
   // Estado del Documento
   const [currentDocument, setCurrentDocument] = useState<LatexDocument | null>(null)
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(projectId)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [content, setContent] = useState<string>(DEFAULT_LATEX_TEMPLATE)
@@ -64,10 +70,20 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, onDocumentOp
     let mounted = true
 
     const initDocument = async () => {
+      if (!documentId) {
+        setCurrentDocument(null)
+        setContent('')
+        setLoadError(null)
+        setIsLoading(false)
+        return
+      }
       try {
         const docData = await getDocument(documentId)
         if (mounted) {
           setCurrentDocument(docData)
+          // Se conserva para que el File Tree siga visible aunque se cierren todas las pestañas.
+          setLoadedProjectId(docData.projectId)
+          onDocumentNameLoaded(documentId, docData.name)
           const initialContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
           setContent(initialContent)
           setSaveStatus('saved')
@@ -104,10 +120,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, onDocumentOp
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)
         autoSaveTimerRef.current = null
-        saveDocument(documentId, contentRef.current, true).catch(() => {})
+        if (documentId) {
+          saveDocument(documentId, contentRef.current, true).catch(() => {})
+        }
       }
     }
-  }, [documentId])
+  }, [documentId, onDocumentNameLoaded])
 
   // 2. Manejo de Autoguardado con Debounce (isAutoSave: true)
   const triggerAutoSave = useCallback((docId: string, textToSave: string) => {
@@ -360,13 +378,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, onDocumentOp
 
       {/* Espacio de trabajo dividido (Editor + Separador + Visor PDF) */}
       <div className="overleaf-split-container" ref={splitContainerRef}>
-        {currentDocument?.projectId && (
+        {loadedProjectId && (
           <FileExplorer
-            projectId={currentDocument.projectId}
-            currentDocumentId={currentDocument.id}
+            projectId={loadedProjectId}
+            currentDocumentId={currentDocument?.id || ''}
             currentContent={content}
             outlineVersion={compileTimestamp}
             onOpenDocument={(id) => onDocumentOpen?.(id)}
+            onDocumentDeleted={(id) => onDocumentDeleted?.(id)}
             onDocumentRenamed={(id, name) => {
               if (id === currentDocument.id) setCurrentDocument((previous) => previous ? { ...previous, name } : previous)
             }}
@@ -383,6 +402,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, onDocumentOp
         >
           <LatexCodeEditor
             value={content}
+            documentId={documentId}
+            openTabs={openTabs}
+            onOpenTab={(id) => onDocumentOpen?.(id)}
+            onCloseTab={onCloseTab}
             onChange={handleContentChange}
             onSave={() => void handleSaveAndCompile()}
             errors={errors}

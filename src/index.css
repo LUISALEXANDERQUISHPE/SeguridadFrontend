@@ -56,7 +56,24 @@ button, input { font: inherit; }
 .overleaf-editor-root { display: flex; flex-direction: column; height: calc(100vh - 120px); width: 100%; background: #fdfdfd; position: relative; overflow: hidden; }
 
 /* Barra Superior de Herramientas */
-.editor-top-toolbar { height: 50px; background: #f7f5f0; border-bottom: 1px solid #d9d5cc; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; flex-shrink: 0; user-select: none; }
+.editor-top-toolbar { height: 50px; position: relative; display: flex; align-items: flex-start; gap: 18px; padding: 8px 14px 0; color: #f1f5f9; background: #172231; border-top: 2px solid #237052; border-bottom: 1px solid #334155; flex-shrink: 0; user-select: none; font-family: Arial, sans-serif; }
+.editor-brand { display: flex; align-items: center; gap: 7px; min-width: 128px; height: 32px; }
+.editor-brand .brand-mark { width: 28px; height: 28px; font-size: 17px; }
+.editor-brand-name { color: #f8fafc; font-size: 15px; font-weight: 700; }
+.editor-menu-links { display: flex; gap: 18px; align-items: center; height: 32px; color: #cbd5e1; font-size: 12px; }
+.editor-menu-links span { cursor: default; }
+.editor-project-name { margin-left: auto; height: 32px; display: flex; align-items: center; gap: 6px; color: #e2e8f0; font-size: 12px; font-weight: 600; }
+.editor-toolbar-actions { height: 32px; }
+.editor-top-toolbar .toolbar-btn { color: #e2e8f0; background: #263548; border-color: #475569; }
+.editor-top-toolbar .btn-compile { color: #fff; background: #237052; border-color: #1c5b42; }
+.editor-tabs { display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; }
+.editor-tabs-in-panel { height: 38px; flex: 0 0 38px; padding: 4px 8px 0; background: #172231; border-bottom: 1px solid #cbd5e1; }
+.editor-file-tab-path { height: 34px; display: flex; align-items: center; max-width: 190px; border: 1px solid #334155; border-bottom: 0; background: #202d3d; color: #cbd5e1; }
+.editor-file-tab-path.active { background: #fdfdfd; color: #17392d; border-color: #cbd5e1; }
+.editor-file-tab-path > button:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: inherit; padding: 8px 7px; cursor: pointer; font-size: 12px; }
+.editor-tab-file-icon { margin-right: 6px; color: #368566; }
+.editor-tab-close { border: 0; background: transparent; color: inherit; padding: 4px 8px; cursor: pointer; font-size: 15px; }
+.editor-tab-close:hover { color: #b91c1c; }
 .toolbar-doc-info { display: flex; align-items: center; gap: 10px; }
 .doc-icon { font-size: 18px; }
 .doc-title-box { display: flex; align-items: center; gap: 12px; }
@@ -271,7 +288,7 @@ button, input { font: inherit; }
 
 /* Espacio de trabajo: barra lateral de proyectos + editor */
 .app-shell.authenticated { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-.app-shell.authenticated .app-header { flex-shrink: 0; }
+.app-shell.authenticated .app-header { display: none; }
 .app-main-workspace { flex: 1; min-height: 0; display: flex; width: 100%; }
 .workspace-root { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workspace-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
