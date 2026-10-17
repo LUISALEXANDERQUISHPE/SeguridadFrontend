@@ -17,13 +17,15 @@ import LatexCodeEditor from './components/LatexCodeEditor'
 import PdfViewer from './components/PdfViewer'
 import CompilationConsole from './components/CompilationConsole'
 import EditorToolbar from './components/EditorToolbar'
+import FileExplorer from './components/FileExplorer'
 
 interface EditorPageProps {
   // Documento a editar; el editor solo se muestra al crear o abrir un proyecto desde la barra lateral
   documentId: string
+  onDocumentOpen?: (documentId: string) => void
 }
 
-export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
+export const EditorPage: React.FC<EditorPageProps> = ({ documentId, onDocumentOpen }) => {
   // Estado del Documento
   const [currentDocument, setCurrentDocument] = useState<LatexDocument | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(true)
@@ -172,6 +174,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
       setCompilationTime(compRes.compilationTime)
       setErrors(compRes.errors || [])
       setWarnings(compRes.warnings || [])
+      setCompileTimestamp(Date.now())
 
       if (compRes.success) {
         setCompileStatus('success')
@@ -180,7 +183,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
           setPdfUrl(compRes.pdfUrl)
           setPreviousPdfUrl(compRes.pdfUrl)
         }
-        setCompileTimestamp(Date.now())
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -236,6 +238,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
       setCompilationTime(res.compilationTime)
       setErrors(res.errors || [])
       setWarnings(res.warnings || [])
+      setCompileTimestamp(Date.now())
 
       if (res.success) {
         setCompileStatus('success')
@@ -243,7 +246,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
           setPdfUrl(res.pdfUrl)
           setPreviousPdfUrl(res.pdfUrl)
         }
-        setCompileTimestamp(Date.now())
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -358,6 +360,22 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
 
       {/* Espacio de trabajo dividido (Editor + Separador + Visor PDF) */}
       <div className="overleaf-split-container" ref={splitContainerRef}>
+        {currentDocument?.projectId && (
+          <FileExplorer
+            projectId={currentDocument.projectId}
+            currentDocumentId={currentDocument.id}
+            currentContent={content}
+            outlineVersion={compileTimestamp}
+            onOpenDocument={(id) => onDocumentOpen?.(id)}
+            onDocumentRenamed={(id, name) => {
+              if (id === currentDocument.id) setCurrentDocument((previous) => previous ? { ...previous, name } : previous)
+            }}
+            onNavigateToLine={(line) => {
+              setTargetLine(null)
+              setTimeout(() => setTargetLine(line), 20)
+            }}
+          />
+        )}
         {/* Panel Izquierdo: Editor LaTeX */}
         <div
           className="overleaf-panel panel-left"
