@@ -36,6 +36,18 @@ export interface LatexDocument {
   lastCompilation?: LastCompilation | null
 }
 
+export interface ProjectNode {
+  id: string
+  proyecto_id: string
+  padre_id: string | null
+  nombre: string
+  tipo_nodo: 'archivo' | 'carpeta'
+  tipo_archivo?: string | null
+  contenido_actual?: string | null
+  tamano_bytes?: number | null
+  storage_path?: string | null
+}
+
 export interface DocumentListItem {
   id: string
   projectId?: string

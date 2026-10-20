@@ -17,15 +17,23 @@ import LatexCodeEditor from './components/LatexCodeEditor'
 import PdfViewer from './components/PdfViewer'
 import CompilationConsole from './components/CompilationConsole'
 import EditorToolbar from './components/EditorToolbar'
+import FileExplorer from './components/FileExplorer'
 
 interface EditorPageProps {
   // Documento a editar; el editor solo se muestra al crear o abrir un proyecto desde la barra lateral
-  documentId: string
+  documentId: string | null
+  projectId: string | null
+  onDocumentOpen?: (documentId: string) => void
+  onDocumentDeleted?: (documentId: string) => void
+  openTabs: Array<{ id: string; name: string }>
+  onCloseTab: (documentId: string) => void
+  onDocumentNameLoaded: (documentId: string, name: string) => void
 }
 
-export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
+export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, onDocumentOpen, onDocumentDeleted, openTabs, onCloseTab, onDocumentNameLoaded }) => {
   // Estado del Documento
   const [currentDocument, setCurrentDocument] = useState<LatexDocument | null>(null)
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(projectId)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [content, setContent] = useState<string>(DEFAULT_LATEX_TEMPLATE)
@@ -62,10 +70,20 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
     let mounted = true
 
     const initDocument = async () => {
+      if (!documentId) {
+        setCurrentDocument(null)
+        setContent('')
+        setLoadError(null)
+        setIsLoading(false)
+        return
+      }
       try {
         const docData = await getDocument(documentId)
         if (mounted) {
           setCurrentDocument(docData)
+          // Se conserva para que el File Tree siga visible aunque se cierren todas las pestañas.
+          setLoadedProjectId(docData.projectId)
+          onDocumentNameLoaded(documentId, docData.name)
           const initialContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
           setContent(initialContent)
           setSaveStatus('saved')
@@ -102,10 +120,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)
         autoSaveTimerRef.current = null
-        saveDocument(documentId, contentRef.current, true).catch(() => {})
+        if (documentId) {
+          saveDocument(documentId, contentRef.current, true).catch(() => {})
+        }
       }
     }
-  }, [documentId])
+  }, [documentId, onDocumentNameLoaded])
 
   // 2. Manejo de Autoguardado con Debounce (isAutoSave: true)
   const triggerAutoSave = useCallback((docId: string, textToSave: string) => {
@@ -134,6 +154,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
       triggerAutoSave(currentDocument.id, newContent)
     } else if (!currentDocument?.id) {
       setSaveStatus('unsaved')
+    }
+  }
+
+  const handleInsertText = (text: string) => {
+    const editor = document.querySelector<HTMLTextAreaElement>('.editor-textarea')
+    const currentText = contentRef.current
+    const start = editor?.selectionStart ?? currentText.length
+    const end = editor?.selectionEnd ?? start
+    const nextContent = `${currentText.slice(0, start)}${text}${currentText.slice(end)}`
+
+    handleContentChange(nextContent)
+
+    if (editor) {
+      const cursorPosition = start + text.length
+      requestAnimationFrame(() => {
+        editor.focus()
+        editor.setSelectionRange(cursorPosition, cursorPosition)
+      })
     }
   }
 
@@ -172,6 +210,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
       setCompilationTime(compRes.compilationTime)
       setErrors(compRes.errors || [])
       setWarnings(compRes.warnings || [])
+      setCompileTimestamp(Date.now())
 
       if (compRes.success) {
         setCompileStatus('success')
@@ -180,7 +219,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
           setPdfUrl(compRes.pdfUrl)
           setPreviousPdfUrl(compRes.pdfUrl)
         }
-        setCompileTimestamp(Date.now())
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -236,6 +274,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
       setCompilationTime(res.compilationTime)
       setErrors(res.errors || [])
       setWarnings(res.warnings || [])
+      setCompileTimestamp(Date.now())
 
       if (res.success) {
         setCompileStatus('success')
@@ -243,7 +282,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
           setPdfUrl(res.pdfUrl)
           setPreviousPdfUrl(res.pdfUrl)
         }
-        setCompileTimestamp(Date.now())
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -352,12 +390,31 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
         onCompile={() => void handleCompile()}
         onDownloadPdf={handleDownloadPdf}
         onDownloadSource={handleDownloadSource}
+        onInsertText={handleInsertText}
+        onToggleConsole={() => setIsConsoleOpen((previous) => !previous)}
         isCompiling={compileStatus === 'compiling'}
         isSaving={saveStatus === 'saving'}
       />
 
       {/* Espacio de trabajo dividido (Editor + Separador + Visor PDF) */}
       <div className="overleaf-split-container" ref={splitContainerRef}>
+        {loadedProjectId && (
+          <FileExplorer
+            projectId={loadedProjectId}
+            currentDocumentId={currentDocument?.id || ''}
+            currentContent={content}
+            outlineVersion={compileTimestamp}
+            onOpenDocument={(id) => onDocumentOpen?.(id)}
+            onDocumentDeleted={(id) => onDocumentDeleted?.(id)}
+            onDocumentRenamed={(id, name) => {
+              if (id === currentDocument.id) setCurrentDocument((previous) => previous ? { ...previous, name } : previous)
+            }}
+            onNavigateToLine={(line) => {
+              setTargetLine(null)
+              setTimeout(() => setTargetLine(line), 20)
+            }}
+          />
+        )}
         {/* Panel Izquierdo: Editor LaTeX */}
         <div
           className="overleaf-panel panel-left"
@@ -365,6 +422,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId }) => {
         >
           <LatexCodeEditor
             value={content}
+            documentId={documentId}
+            openTabs={openTabs}
+            onOpenTab={(id) => onDocumentOpen?.(id)}
+            onCloseTab={onCloseTab}
             onChange={handleContentChange}
             onSave={() => void handleSaveAndCompile()}
             errors={errors}
