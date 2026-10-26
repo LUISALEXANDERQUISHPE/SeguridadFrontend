@@ -27,6 +27,9 @@ export interface LatexDocument {
   projectName?: string
   name: string
   content: string
+  // false para binarios (imágenes, PDFs...), que no se editan como texto
+  isText?: boolean
+  fileType?: string | null
   sizeBytes?: number
   role?: string
   description?: string
@@ -103,6 +106,8 @@ export interface CompileDocumentRequest {
 export interface CompileDocumentResponse {
   success: boolean
   documentId: string
+  // Archivo .tex que realmente se compiló (puede ser distinto del archivo abierto, ej. al compilar desde un capítulo o un .bib)
+  mainDocument?: { id: string; name: string; path: string }
   compilationId: string
   pdfUrl: string | null
   previousPdfUrl?: string | null

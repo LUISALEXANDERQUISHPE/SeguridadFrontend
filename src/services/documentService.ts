@@ -144,6 +144,17 @@ export async function deleteProjectNode(projectId: string, nodeId: string): Prom
   await requestWithAuth(`/documents/project/${projectId}/nodes/${nodeId}`, { method: 'DELETE' })
 }
 
+/**
+ * Obtiene el contenido de un archivo del proyecto (imagen, PDF, etc.) como Blob con su tipo MIME
+ */
+export async function getProjectNodeBlob(projectId: string, nodeId: string): Promise<Blob> {
+  const token = getAuthToken()
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+  const response = await fetch(`${BASE_URL}/documents/project/${projectId}/nodes/${nodeId}/download?inline=true`, { headers })
+  if (!response.ok) throw new Error('No fue posible obtener el archivo')
+  return response.blob()
+}
+
 export async function downloadProjectNode(projectId: string, node: ProjectNode): Promise<void> {
   const token = getAuthToken()
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
