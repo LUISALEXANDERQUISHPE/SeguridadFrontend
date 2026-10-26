@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   CompilationError,
   CompileStatus,
@@ -11,6 +11,7 @@ import {
   downloadPdfFile,
   downloadSourceFile,
   getDocument,
+  getProjectTree,
   saveDocument,
 } from '../../services/documentService'
 import LatexCodeEditor from './components/LatexCodeEditor'
@@ -18,6 +19,14 @@ import PdfViewer from './components/PdfViewer'
 import CompilationConsole from './components/CompilationConsole'
 import EditorToolbar from './components/EditorToolbar'
 import FileExplorer from './components/FileExplorer'
+import FilePreview from './components/FilePreview'
+import type { ProjectNode } from '../../types/document'
+import { parseBibEntries } from '../../utils/bibtex'
+
+// El PDF se genera aunque la bibliografía falle (citas como [?]); en ese caso se abre la consola con la explicación
+function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
+  return warnings.some((warning) => Boolean(warning.friendlyMessage) && (warning.file === 'bibtex' || warning.file === 'biber' || /bibliograf/i.test(warning.message)))
+}
 
 interface EditorPageProps {
   // Documento a editar; el editor solo se muestra al crear o abrir un proyecto desde la barra lateral
@@ -62,6 +71,13 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
   // Referencias para debounce y control de cambios
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isInitialLoadRef = useRef<boolean>(true)
+  // Línea a la que saltar cuando termine de cargar el archivo abierto desde un error de compilación
+  const pendingLineRef = useRef<number | null>(null)
+
+  // Árbol del proyecto (lo carga el FileExplorer) y últimos textos editados en esta sesión, por si
+  // el autoguardado de un .bib aún no llegó al servidor al cambiar de pestaña
+  const [projectNodes, setProjectNodes] = useState<ProjectNode[]>([])
+  const [editedContents, setEditedContents] = useState<Record<string, string>>({})
   const contentRef = useRef<string>(content)
   contentRef.current = content
 
@@ -84,7 +100,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
           // Se conserva para que el File Tree siga visible aunque se cierren todas las pestañas.
           setLoadedProjectId(docData.projectId)
           onDocumentNameLoaded(documentId, docData.name)
-          const initialContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
+          // Un archivo vacío (ej. un .bib o .csv nuevo) se abre vacío; no se rellena con la plantilla LaTeX
+          const initialContent = docData.autoSave?.contenido || (docData.content ?? '')
           setContent(initialContent)
           setSaveStatus('saved')
           setLastSavedAt(docData.updatedAt ? new Date(docData.updatedAt).toLocaleTimeString() : null)
@@ -99,6 +116,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
             setCompileStatus(docData.lastCompilation?.status === 'fallida' ? 'failed' : 'idle')
           }
           setIsLoading(false)
+          if (pendingLineRef.current) {
+            const line = pendingLineRef.current
+            pendingLineRef.current = null
+            setTimeout(() => setTargetLine(line), 50)
+          }
         }
       } catch (err: unknown) {
         if (mounted) {
@@ -149,7 +171,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
   }, [])
 
   const handleContentChange = (newContent: string) => {
+    // Los binarios (imágenes, PDFs...) no se editan: guardarlos como texto los corrompería
+    if (currentDocument?.isText === false) return
     setContent(newContent)
+    if (currentDocument?.id && /\.bib$/i.test(currentDocument.name)) {
+      setEditedContents((previous) => ({ ...previous, [currentDocument.id]: newContent }))
+    }
     if (!isInitialLoadRef.current && currentDocument?.id) {
       triggerAutoSave(currentDocument.id, newContent)
     } else if (!currentDocument?.id) {
@@ -189,9 +216,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
       autoSaveTimerRef.current = null
     }
 
-    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false
-    setSaveStatus('saving')
-    try {
+    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false (los binarios no se guardan como texto)
+    if (currentDocument.isText !== false) setSaveStatus('saving')
+    if (currentDocument.isText !== false) try {
       const res = await saveDocument(currentDocument.id, currentText, false, 'Guardado manual (Ctrl+S)')
       setSaveStatus('saved')
       setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
@@ -219,6 +246,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
           setPdfUrl(compRes.pdfUrl)
           setPreviousPdfUrl(compRes.pdfUrl)
         }
+        if (hasBibliographyProblem(compRes.warnings)) setIsConsoleOpen(true)
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -282,6 +310,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
           setPdfUrl(res.pdfUrl)
           setPreviousPdfUrl(res.pdfUrl)
         }
+        if (hasBibliographyProblem(res.warnings)) setIsConsoleOpen(true)
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -325,17 +354,75 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
     void downloadSourceFile(currentDocument.id, currentDocument.name, content)
   }
 
-  // 6. Navegación a la línea seleccionada en la consola
-  const handleErrorClick = useCallback((line: number) => {
+  // 6. Navegación a la línea seleccionada en la consola (abre el archivo si el error está en otro, ej. capitulos/intro.tex)
+  const handleErrorClick = useCallback(async (line: number, file?: string) => {
+    if (file && loadedProjectId && currentDocument) {
+      try {
+        const { nodes } = await getProjectTree(loadedProjectId)
+        const byId = new Map(nodes.map((node) => [node.id, node]))
+        const pathOf = (nodeId: string): string => {
+          const parts: string[] = []
+          let current = byId.get(nodeId)
+          while (current && parts.length < 64) {
+            parts.unshift(current.nombre)
+            current = current.padre_id ? byId.get(current.padre_id) : undefined
+          }
+          return parts.join('/')
+        }
+        const normalized = file.replace(/\\/g, '/').replace(/^\.\//, '')
+        const files = nodes.filter((node) => node.tipo_nodo === 'archivo')
+        const target = files.find((node) => pathOf(node.id) === normalized)
+          || files.find((node) => pathOf(node.id).endsWith(`/${normalized}`))
+        if (target && target.id !== currentDocument.id) {
+          pendingLineRef.current = line
+          onDocumentOpen?.(target.id)
+          return
+        }
+      } catch {
+        // Si no se puede cargar el árbol, saltar a la línea en el archivo actual
+      }
+    }
     setTargetLine(null)
     setTimeout(() => {
       setTargetLine(line)
     }, 20)
-  }, [])
+  }, [loadedProjectId, currentDocument, onDocumentOpen])
 
   const handleLineFocused = useCallback(() => {
     setTargetLine(null)
   }, [])
+
+  // Rutas relativas de los archivos del proyecto (ej. "imagenes/logo.png")
+  const nodePaths = useMemo(() => {
+    const byId = new Map(projectNodes.map((node) => [node.id, node]))
+    const paths = new Map<string, string>()
+    projectNodes.forEach((node) => {
+      const parts: string[] = []
+      let current: ProjectNode | undefined = node
+      while (current && parts.length < 64) {
+        parts.unshift(current.nombre)
+        current = current.padre_id ? byId.get(current.padre_id) : undefined
+      }
+      paths.set(node.id, parts.join('/'))
+    })
+    return paths
+  }, [projectNodes])
+
+  // Entradas de todos los .bib del proyecto, para sugerirlas dentro de \cite{...}
+  const citations = useMemo(() => {
+    const seen = new Set<string>()
+    return projectNodes
+      .filter((node) => node.tipo_nodo === 'archivo' && /\.bib$/i.test(node.nombre))
+      .flatMap((node) => parseBibEntries(editedContents[node.id] ?? node.contenido_actual ?? '', nodePaths.get(node.id) || node.nombre))
+      .filter((entry) => !seen.has(entry.key) && Boolean(seen.add(entry.key)))
+  }, [projectNodes, editedContents, nodePaths])
+
+  const projectFiles = useMemo(
+    () => projectNodes.filter((node) => node.tipo_nodo === 'archivo').map((node) => nodePaths.get(node.id) || node.nombre),
+    [projectNodes, nodePaths]
+  )
+
+  const currentNode = currentDocument?.isText === false ? projectNodes.find((node) => node.id === currentDocument.id) : undefined
 
   // 7. Manejo de redimensionamiento de paneles (Split Drag)
   const handleMouseDown = () => {
@@ -413,6 +500,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
               setTargetLine(null)
               setTimeout(() => setTargetLine(line), 20)
             }}
+            onInsertText={handleInsertText}
+            onNodesLoaded={setProjectNodes}
+            refreshKey={documentId || ''}
           />
         )}
         {/* Panel Izquierdo: Editor LaTeX */}
@@ -431,6 +521,15 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
             errors={errors}
             targetLine={targetLine}
             onLineFocused={handleLineFocused}
+            citations={citations}
+            projectFiles={projectFiles}
+            customBody={currentDocument?.isText === false && loadedProjectId ? (
+              <FilePreview
+                projectId={loadedProjectId}
+                node={currentNode || { id: currentDocument.id, proyecto_id: loadedProjectId, padre_id: null, nombre: currentDocument.name, tipo_nodo: 'archivo', tamano_bytes: currentDocument.sizeBytes }}
+                path={nodePaths.get(currentDocument.id) || currentDocument.name}
+              />
+            ) : undefined}
           />
         </div>
 
@@ -467,7 +566,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
         warnings={warnings}
         log={compilationLog}
         compilationTime={compilationTime}
-        onErrorClick={handleErrorClick}
+        onErrorClick={(line, file) => void handleErrorClick(line, file)}
         isOpen={isConsoleOpen}
         onToggleOpen={() => setIsConsoleOpen((prev) => !prev)}
       />

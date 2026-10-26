@@ -340,6 +340,24 @@ button, input { font: inherit; }
 .file-context-menu button:hover { background: #e3ede7; color: #17392d; }
 .file-context-menu button.danger { color: #b91c1c; }
 .file-context-menu button.danger:hover { background: #fef2f2; }
+.file-preview-panel { display: flex; flex-direction: column; flex: 1; min-width: 0; background: #f4f6f3; overflow: auto; }
+.file-preview-stage { flex: 1; min-height: 200px; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.file-preview-stage img { max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid #d9ded7; box-shadow: 0 4px 14px rgba(23, 57, 45, .12); background: repeating-conic-gradient(#ececea 0% 25%, #fff 0% 50%) 50% / 16px 16px; }
+.file-preview-stage iframe { width: 100%; height: 100%; min-height: 420px; border: 1px solid #d9ded7; background: #fff; }
+.file-preview-info { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid #d9ded7; background: #fbfaf7; }
+.file-preview-meta { display: flex; align-items: center; gap: 12px; color: #34423b; font-size: 13px; }
+.file-preview-meta span { color: #6b7770; font-size: 12px; }
+.file-preview-download { margin-left: auto; border: 1px solid #cbcfc8; border-radius: 4px; padding: 5px 10px; background: #fff; color: #17392d; font-size: 12px; cursor: pointer; }
+.file-preview-download:hover { background: #e3ede7; }
+.file-preview-hint { color: #6b7770; font-size: 12px; }
+.copyable-snippet { position: relative; }
+.copyable-snippet pre { margin: 0; padding: 10px 12px; padding-right: 96px; border-radius: 4px; background: #172231; color: #e2e8f0; font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.copyable-snippet-btn { position: absolute; top: 6px; right: 6px; border: 1px solid #3b4b60; border-radius: 4px; padding: 4px 9px; background: #24324a; color: #e2e8f0; font-size: 12px; cursor: pointer; transition: background .15s ease; }
+.copyable-snippet-btn:hover { background: #2f4260; }
+.copyable-snippet-btn.copied { background: #237052; border-color: #237052; color: #fff; }
+.copyable-snippet-btn.error { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.badge-cite { background: #14532d; color: #bbf7d0; }
+.badge-file { background: #7c2d12; color: #fed7aa; }
 .file-tree-rename-input { cursor: text; }
 .workspace-empty { margin: auto; max-width: 560px; padding: 40px 6vw; }
 .workspace-empty h1 { margin: 0; color: #17392d; font-size: clamp(36px, 5vw, 60px); line-height: 1; letter-spacing: -2px; font-weight: 500; }
