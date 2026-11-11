@@ -10,31 +10,30 @@ function App() {
 
   const displayName = profile?.nombre_completo || profile?.correo || 'Usuario'
 
+  // Con sesión iniciada, el panel de proyectos ocupa toda la pantalla (como en Overleaf)
+  if (isAuthenticated) {
+    return <WorkspacePage displayName={displayName} onSignOut={signOut} />
+  }
+
   return (
-    <div className={`app-shell ${isAuthenticated ? 'authenticated' : ''}`}>
-      <Header authenticated={isAuthenticated} username={displayName} onSignOut={signOut} />
-      <main className={isAuthenticated ? 'app-main-workspace' : 'app-main'}>
-        {isAuthenticated ? (
-          <WorkspacePage displayName={displayName} />
-        ) : (
-          <>
-            <section className="product-story">
-              <p className="story-kicker">Documentos que avanzan contigo</p>
-              <h2>Escribe sin perder el hilo.</h2>
-              <p>Un espacio claro para colaborar, compilar y proteger cada idea.</p>
-              <div className="story-meta">
-                <span className="meta-dot" /> API segura conectada
-              </div>
-            </section>
-            <div className="login-wrap">
-              <LoginForm onAuthenticated={signIn} />
-            </div>
-          </>
-        )}
+    <div className="app-shell">
+      <Header />
+      <main className="app-main">
+        <section className="product-story">
+          <p className="story-kicker">Documentos que avanzan contigo</p>
+          <h2>Escribe sin perder el hilo.</h2>
+          <p>Un espacio claro para colaborar, compilar y proteger cada idea.</p>
+          <div className="story-meta">
+            <span className="meta-dot" /> API segura conectada
+          </div>
+        </section>
+        <div className="login-wrap">
+          <LoginForm onAuthenticated={signIn} />
+        </div>
       </main>
-      {!isAuthenticated && (
-        <footer className="app-footer">Secureleaf <span>•</span> {new Date().getFullYear()}</footer>
-      )}
+      <footer className="app-footer">
+        Secureleaf <span>•</span> {new Date().getFullYear()}
+      </footer>
     </div>
   )
 }

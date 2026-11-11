@@ -1,7 +1,35 @@
-import React, { useEffect, useState } from 'react'
+import { useState, type SyntheticEvent } from 'react'
+import Modal from '../../../components/common/Modal'
+import { PROJECT_LIMITS } from '../types'
+
+function toMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'No fue posible completar la operación'
+}
+
+/**
+ * Ejecuta una acción asíncrona del modal controlando el estado "enviando" y el error.
+ * Si termina bien, cierra el modal.
+ */
+function useModalSubmit(onClose: () => void) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = async (action: () => Promise<void>) => {
+    setIsSubmitting(true)
+    setError(null)
+    try {
+      await action()
+      onClose()
+    } catch (err: unknown) {
+      setError(toMessage(err))
+      setIsSubmitting(false)
+    }
+  }
+
+  return { isSubmitting, error, setError, run }
+}
 
 interface ProjectFormModalProps {
-  isOpen: boolean
   title: string
   submitLabel: string
   submittingLabel: string
@@ -13,8 +41,8 @@ interface ProjectFormModalProps {
   onSubmit: (name: string, description: string) => Promise<void>
 }
 
-export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
-  isOpen,
+/** Formulario de nombre y descripción, reutilizado para crear, modificar y duplicar. */
+export function ProjectFormModal({
   title,
   submitLabel,
   submittingLabel,
@@ -24,104 +52,73 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   info,
   onClose,
   onSubmit,
-}) => {
+}: Readonly<ProjectFormModalProps>) {
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { isSubmitting, error, setError, run } = useModalSubmit(onClose)
 
-  useEffect(() => {
-    if (isOpen) {
-      setName(initialName)
-      setDescription(initialDescription)
-      setError(null)
-    }
-  }, [isOpen, initialName, initialDescription])
-
-  if (!isOpen) return null
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault()
     if (!name.trim()) {
       setError('Por favor escribe un nombre para el proyecto')
       return
     }
-
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      await onSubmit(name.trim(), description.trim())
-      onClose()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'No fue posible completar la operación')
-    } finally {
-      setIsSubmitting(false)
-    }
+    void run(() => onSubmit(name.trim(), description.trim()))
   }
 
   return (
-    <div className="modal-overlay" onClick={isSubmitting ? undefined : onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button type="button" className="modal-close-btn" onClick={onClose} disabled={isSubmitting}>
-            ✕
-          </button>
+    <Modal title={title} isBusy={isSubmitting} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="pm-form" noValidate>
+        {error && (
+          <p className="pm-alert pm-alert-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="pm-field">
+          <label htmlFor="project-name">Nombre del proyecto</label>
+          <input
+            id="project-name"
+            type="text"
+            placeholder="ej. Tesis de grado"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={PROJECT_LIMITS.MAX_NAME_LENGTH}
+            autoComplete="off"
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="modal-form">
-          {error && <div className="modal-error">{error}</div>}
-
-          <div className="modal-field">
-            <label htmlFor="project-name">Nombre del proyecto:</label>
-            <input
-              id="project-name"
-              type="text"
-              placeholder="ej. Tesis de grado"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-              autoFocus
-              required
+        {showDescription && (
+          <div className="pm-field">
+            <label htmlFor="project-desc">Descripción (opcional)</label>
+            <textarea
+              id="project-desc"
+              placeholder="ej. Borrador del capítulo 1"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              maxLength={PROJECT_LIMITS.MAX_DESCRIPTION_LENGTH}
+              rows={3}
             />
           </div>
+        )}
 
-          {showDescription && (
-            <div className="modal-field">
-              <label htmlFor="project-desc">Descripción (opcional):</label>
-              <input
-                id="project-desc"
-                type="text"
-                placeholder="ej. Borrador del capítulo 1"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={500}
-              />
-            </div>
-          )}
+        {info && <p className="pm-hint">{info}</p>}
 
-          {info && (
-            <div className="modal-info">
-              <p>{info}</p>
-            </div>
-          )}
-
-          <div className="modal-actions">
-            <button type="button" className="modal-btn-cancel" onClick={onClose} disabled={isSubmitting}>
-              Cancelar
-            </button>
-            <button type="submit" className="modal-btn-submit" disabled={isSubmitting}>
-              {isSubmitting ? submittingLabel : submitLabel}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="pm-dialog-actions">
+          <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
+            Cancelar
+          </button>
+          <button type="submit" className="pm-btn pm-btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? submittingLabel : submitLabel}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
 interface ConfirmModalProps {
-  isOpen: boolean
   title: string
   message: string
   confirmLabel: string
@@ -131,8 +128,8 @@ interface ConfirmModalProps {
   onConfirm: () => Promise<void>
 }
 
-export const ConfirmModal: React.FC<ConfirmModalProps> = ({
-  isOpen,
+/** Confirmación de acciones (archivar, eliminar). */
+export function ConfirmModal({
   title,
   message,
   confirmLabel,
@@ -140,59 +137,34 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   danger = false,
   onClose,
   onConfirm,
-}) => {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (isOpen) setError(null)
-  }, [isOpen])
-
-  if (!isOpen) return null
-
-  const handleConfirm = async () => {
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      await onConfirm()
-      onClose()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'No fue posible completar la operación')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+}: Readonly<ConfirmModalProps>) {
+  const { isSubmitting, error, run } = useModalSubmit(onClose)
 
   return (
-    <div className="modal-overlay" onClick={isSubmitting ? undefined : onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button type="button" className="modal-close-btn" onClick={onClose} disabled={isSubmitting}>
-            ✕
+    <Modal title={title} isBusy={isSubmitting} onClose={onClose}>
+      <div className="pm-form">
+        {error && (
+          <p className="pm-alert pm-alert-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <p className="pm-confirm-text">{message}</p>
+
+        <div className="pm-dialog-actions">
+          <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className={`pm-btn ${danger ? 'pm-btn-danger' : 'pm-btn-primary'}`}
+            onClick={() => void run(onConfirm)}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? confirmingLabel : confirmLabel}
           </button>
         </div>
-
-        <div className="modal-form">
-          {error && <div className="modal-error">{error}</div>}
-
-          <p className="modal-confirm-text">{message}</p>
-
-          <div className="modal-actions">
-            <button type="button" className="modal-btn-cancel" onClick={onClose} disabled={isSubmitting}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className={danger ? 'modal-btn-danger' : 'modal-btn-submit'}
-              onClick={() => void handleConfirm()}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? confirmingLabel : confirmLabel}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }

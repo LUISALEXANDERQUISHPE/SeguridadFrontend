@@ -1,8 +1,27 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { CompileStatus } from '../../../types/document'
-import { downloadPdfFile, getPdfBlob } from '../../../services/documentService'
+import { downloadPdfFile } from '../../../services/documentService'
+import Icon from '../../../components/common/Icon'
+import { usePdfDocument } from '../pdf/usePdfDocument'
+import PdfPage from '../pdf/PdfPage'
+import type { PDFDocumentProxy } from '../pdf/pdfjs'
+
+const ZOOM_STEP = 1.2
+const MIN_SCALE = 0.4
+const MAX_SCALE = 4
+const PAGE_GAP_PX = 32
+
+type ZoomMode = 'fit-width' | number
+
+interface PageSize {
+  width: number
+  height: number
+}
 
 interface PdfViewerProps {
+  /** Número de errores de la última compilación (insignia del botón de registro). */
+  errorCount?: number
+  onToggleLogs?: () => void
   documentId: string | null
   documentName?: string
   pdfUrl: string | null
@@ -13,7 +32,72 @@ interface PdfViewerProps {
   onCompileRequest?: () => void
 }
 
-export const PdfViewer: React.FC<PdfViewerProps> = ({
+/** Ancho disponible del contenedor de páginas, actualizado al redimensionar los paneles. */
+function useElementWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(0)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return undefined
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+
+  return width
+}
+
+/** Tamaño (a escala 1) de la primera página, usado para calcular el zoom "ajustar al ancho". */
+function useFirstPageSize(pdf: PDFDocumentProxy | null): PageSize | null {
+  const [size, setSize] = useState<{ pdf: PDFDocumentProxy; value: PageSize } | null>(null)
+
+  useEffect(() => {
+    if (!pdf) return undefined
+    let isCurrent = true
+    pdf
+      .getPage(1)
+      .then((page) => {
+        const viewport = page.getViewport({ scale: 1 })
+        if (isCurrent) setSize({ pdf, value: { width: viewport.width, height: viewport.height } })
+      })
+      .catch((err: unknown) => console.warn('[PDF] No se pudo leer la primera página:', err))
+    return () => {
+      isCurrent = false
+    }
+  }, [pdf])
+
+  return size && size.pdf === pdf ? size.value : null
+}
+
+function clampScale(scale: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
+}
+
+interface StatusScreenProps {
+  icon?: ReactNode
+  title: string
+  description?: string
+  action?: ReactNode
+}
+
+function StatusScreen({ icon, title, description, action }: Readonly<StatusScreenProps>) {
+  return (
+    <div className="pdf-status-screen">
+      {icon}
+      <p className="pdf-status-text">{title}</p>
+      {description && <span className="pdf-status-sub">{description}</span>}
+      {action}
+    </div>
+  )
+}
+
+/**
+ * Visor del PDF compilado (pdf.js), con la barra de Overleaf:
+ * Recompilar, registro y descarga a la izquierda; páginas y zoom a la derecha.
+ */
+export function PdfViewer({
+  errorCount = 0,
+  onToggleLogs,
   documentId,
   documentName = 'documento.pdf',
   pdfUrl,
@@ -22,240 +106,189 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   compileTimestamp,
   isCompiling = false,
   onCompileRequest,
-}) => {
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
-  const [zoomLevel, setZoomLevel] = useState<number>(100)
-  const [currentPage, setCurrentPage] = useState<number>(1)
+}: Readonly<PdfViewerProps>) {
+  const { pdf, loading } = usePdfDocument({ documentId, pdfUrl, previousPdfUrl, compileStatus, compileTimestamp })
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const containerWidth = useElementWidth(scrollRef)
+  const pageSize = useFirstPageSize(pdf)
+  const [zoom, setZoom] = useState<ZoomMode>('fit-width')
+  const [currentPage, setCurrentPage] = useState(1)
 
-  useEffect(() => {
-    // 3. No llamar GET /pdf cuando success: false
-    if (compileStatus === 'failed') {
-      console.log('[PDF] solicitud omitida porque success=false')
+  const numPages = pdf?.numPages ?? 0
+  const fitScale = pageSize && containerWidth > 0 ? (containerWidth - PAGE_GAP_PX) / pageSize.width : 1
+  const scale = clampScale(zoom === 'fit-width' ? fitScale : zoom)
+  const visiblePage = Math.min(Math.max(currentPage, 1), Math.max(numPages, 1))
 
-      // 7. Si previousPdfUrl es null, no mantener PDF previo
-      // 8. Mantener el PDF anterior solamente si realmente existe
-      if (!previousPdfUrl) {
-        if (pdfBlobUrl) {
-          window.URL.revokeObjectURL(pdfBlobUrl)
-          setPdfBlobUrl(null)
-        }
-      }
-      setLoading(false)
-      return
-    }
+  const handleScroll = () => {
+    const container = scrollRef.current
+    if (!container) return
+    const probe = container.scrollTop + container.clientHeight / 3
+    const pages = Array.from(container.querySelectorAll<HTMLElement>('.pdfjs-page'))
+    const current = pages.findLast((page) => page.offsetTop <= probe)
+    setCurrentPage(Number(current?.dataset.pageNumber ?? 1))
+  }
 
-    // 4. No actualizar pdfUrl cuando pdfUrl es null, y no llamar si no hay documentId
-    if (!documentId || !pdfUrl) {
-      if (pdfBlobUrl && !previousPdfUrl) {
-        window.URL.revokeObjectURL(pdfBlobUrl)
-        setPdfBlobUrl(null)
-      }
-      setLoading(false)
-      return
-    }
-
-    // Si la compilación está en curso, esperar a que finalice
-    if (compileStatus === 'compiling') {
-      return
-    }
-
-    // 5. Carga segura del PDF como Blob únicamente cuando existe un PDF válido
-    let isMounted = true
-    const loadPdf = async () => {
-      setLoading(true)
-
-      try {
-        const blob = await getPdfBlob(documentId)
-        if (!isMounted) return
-
-        if (pdfBlobUrl) {
-          window.URL.revokeObjectURL(pdfBlobUrl)
-        }
-        const newUrl = window.URL.createObjectURL(blob)
-        setPdfBlobUrl(newUrl)
-      } catch (err: unknown) {
-        if (!isMounted) return
-        // 6. No mostrar el 404 como un error independiente de red
-        console.warn('[PDF] Error al cargar el archivo PDF:', err)
-        setPdfBlobUrl(null)
-      } finally {
-        if (isMounted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadPdf()
-
-    return () => {
-      isMounted = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, pdfUrl, compileTimestamp, compileStatus, previousPdfUrl])
-
-  // Limpieza al desmontar
-  useEffect(() => {
-    return () => {
-      if (pdfBlobUrl) {
-        window.URL.revokeObjectURL(pdfBlobUrl)
-      }
-    }
-  }, [pdfBlobUrl])
+  const goToPage = (pageNumber: number) => {
+    const target = scrollRef.current?.querySelector<HTMLElement>(`[data-page-number="${pageNumber}"]`)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const handleDownload = () => {
     if (!documentId) return
-    const filename = documentName.replace(/\.tex$/i, '') + '.pdf'
-    void downloadPdfFile(documentId, filename)
+    void downloadPdfFile(documentId, `${documentName.replace(/\.tex$/i, '')}.pdf`)
   }
 
-  const handleZoomIn = () => setZoomLevel((prev) => Math.min(prev + 25, 250))
-  const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 25, 50))
-  const handleZoomReset = () => setZoomLevel(100)
+  const renderContent = () => {
+    if (pdf && pageSize) {
+      return Array.from({ length: numPages }, (_, index) => (
+        <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} scale={scale} baseSize={pageSize} />
+      ))
+    }
+    if (isCompiling || loading) {
+      return (
+        <StatusScreen
+          icon={<div className="pdf-spinner" />}
+          title={isCompiling ? 'Compilando documento...' : 'Cargando PDF...'}
+        />
+      )
+    }
+    if (compileStatus === 'failed') {
+      return (
+        <StatusScreen
+          icon={<div className="pdf-empty-icon">⚠️</div>}
+          title="No existe un PDF válido para esta compilación"
+          description="LaTeX encontró errores en el código fuente. Revisa el registro para corregirlos."
+          action={
+            onToggleLogs && (
+              <button type="button" onClick={onToggleLogs} className="pdf-compile-cta-btn">
+                Ver errores
+              </button>
+            )
+          }
+        />
+      )
+    }
+    return (
+      <StatusScreen
+        icon={<div className="pdf-empty-icon">📝</div>}
+        title="Sin vista previa aún"
+        description="Presiona Recompilar para generar el PDF a partir del código LaTeX."
+      />
+    )
+  }
 
-  // URL con parámetros de navegación de PDF embebido (RFC 3778)
-  const viewerUrl = pdfBlobUrl
-    ? `${pdfBlobUrl}#page=${currentPage}&zoom=${zoomLevel}`
-    : null
+  const hasPages = Boolean(pdf && pageSize)
 
   return (
     <div className="pdf-viewer-container">
-      {/* Barra de herramientas del Visor PDF */}
       <div className="pdf-toolbar">
         <div className="pdf-toolbar-group">
-          <span className="pdf-toolbar-title">Vista previa PDF</span>
+          {onCompileRequest && (
+            <button
+              type="button"
+              className="pdf-recompile-btn"
+              onClick={onCompileRequest}
+              disabled={isCompiling}
+              title="Compilar el código LaTeX a PDF (Ctrl+S guarda y compila)"
+            >
+              {isCompiling && <span className="btn-spinner" />}
+              {isCompiling ? 'Compilando...' : 'Recompilar'}
+            </button>
+          )}
+          {onToggleLogs && (
+            <button
+              type="button"
+              className={`pdf-logs-btn ${errorCount > 0 ? 'has-errors' : ''}`}
+              onClick={onToggleLogs}
+              title="Registro y errores de compilación"
+              aria-label={`Registro de compilación: ${errorCount} errores`}
+            >
+              <Icon name="file" />
+              {errorCount > 0 && <span className="pdf-logs-count">{errorCount}</span>}
+            </button>
+          )}
+          <button
+            type="button"
+            className="pdf-logs-btn"
+            onClick={handleDownload}
+            disabled={!hasPages}
+            title="Descargar PDF"
+            aria-label="Descargar PDF"
+          >
+            <Icon name="download" />
+          </button>
         </div>
 
-        {pdfBlobUrl && !loading && (
-          <div className="pdf-toolbar-group">
-            {/* Controles de página */}
+        {hasPages && (
+          <div className="pdf-toolbar-group pdf-nav-group">
             <button
               type="button"
-              className="pdf-btn"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage <= 1}
+              className="pdf-logs-btn"
+              onClick={() => goToPage(visiblePage - 1)}
+              disabled={visiblePage <= 1}
+              aria-label="Página anterior"
               title="Página anterior"
             >
-              ◀
+              <Icon name="arrowUp" />
             </button>
-            <span className="pdf-page-indicator">Pág. {currentPage}</span>
+            <span className="pdf-page-indicator">
+              {visiblePage} / {numPages}
+            </span>
             <button
               type="button"
-              className="pdf-btn"
-              onClick={() => setCurrentPage((p) => p + 1)}
+              className="pdf-logs-btn"
+              onClick={() => goToPage(visiblePage + 1)}
+              disabled={visiblePage >= numPages}
+              aria-label="Página siguiente"
               title="Página siguiente"
             >
-              ▶
+              <Icon name="arrowDown" />
             </button>
 
-            <span className="pdf-toolbar-separator" />
+            <span className="pdf-toolbar-separator" aria-hidden="true" />
 
-            {/* Controles de Zoom */}
             <button
               type="button"
-              className="pdf-btn"
-              onClick={handleZoomOut}
-              disabled={zoomLevel <= 50}
-              title="Reducir zoom (-25%)"
+              className="pdf-logs-btn"
+              onClick={() => setZoom(clampScale(scale / ZOOM_STEP))}
+              disabled={scale <= MIN_SCALE}
+              aria-label="Reducir zoom"
+              title="Reducir zoom"
             >
-              -
+              −
             </button>
             <button
               type="button"
               className="pdf-zoom-label"
-              onClick={handleZoomReset}
-              title="Restablecer zoom al 100%"
+              onClick={() => setZoom('fit-width')}
+              title="Ajustar al ancho"
             >
-              {zoomLevel}%
+              {Math.round(scale * 100)}%
             </button>
             <button
               type="button"
-              className="pdf-btn"
-              onClick={handleZoomIn}
-              disabled={zoomLevel >= 250}
-              title="Aumentar zoom (+25%)"
+              className="pdf-logs-btn"
+              onClick={() => setZoom(clampScale(scale * ZOOM_STEP))}
+              disabled={scale >= MAX_SCALE}
+              aria-label="Aumentar zoom"
+              title="Aumentar zoom"
             >
               +
-            </button>
-
-            <span className="pdf-toolbar-separator" />
-
-            {/* Descargar PDF */}
-            <button
-              type="button"
-              className="pdf-btn pdf-btn-action"
-              onClick={handleDownload}
-              title="Descargar archivo PDF"
-            >
-              Descargar PDF
             </button>
           </div>
         )}
       </div>
 
-      {/* Contenido del visor */}
-      <div className="pdf-viewport">
-        {isCompiling ? (
-          <div className="pdf-status-screen">
-            <div className="pdf-spinner" />
-            <p className="pdf-status-text">Compilando documento con pdflatex...</p>
-            <span className="pdf-status-sub">Generando archivo PDF aislado de forma segura</span>
-          </div>
-        ) : loading ? (
-          <div className="pdf-status-screen">
-            <div className="pdf-spinner" />
-            <p className="pdf-status-text">Cargando PDF...</p>
-          </div>
-        ) : compileStatus === 'failed' && (!previousPdfUrl || !pdfBlobUrl) ? (
-          /* 7. Si previousPdfUrl es null, mostrar “No existe un PDF válido para esta compilación” */
-          <div className="pdf-status-screen">
-            <div className="pdf-empty-icon">⚠️</div>
-            <p className="pdf-status-text">No existe un PDF válido para esta compilación</p>
-            <span className="pdf-status-sub">
-              LaTeX encontró errores en el código fuente. Revisa los detalles en la consola inferior para corregirlos.
-            </span>
-            {onCompileRequest && (
-              <button
-                type="button"
-                onClick={onCompileRequest}
-                className="pdf-compile-cta-btn"
-              >
-                Reintentar compilación
-              </button>
-            )}
-          </div>
-        ) : viewerUrl ? (
-          /* 8. Mantener el PDF anterior solamente si realmente existe */
-          <div className="pdf-frame-wrapper">
-            {compileStatus === 'failed' && previousPdfUrl && (
-              <div className="pdf-stale-banner">
-                ⚠️ Mostrando versión previa (la última compilación tuvo errores)
-              </div>
-            )}
-            <iframe
-              src={viewerUrl}
-              title="Visor PDF Compilado"
-              className="pdf-iframe"
-            />
-          </div>
-        ) : (
-          <div className="pdf-status-screen">
-            <div className="pdf-empty-icon">📝</div>
-            <p className="pdf-status-text">Sin vista previa aún</p>
-            <span className="pdf-status-sub">
-              Presiona <strong>Compilar</strong> para generar el PDF a partir del código LaTeX.
-            </span>
-            {onCompileRequest && (
-              <button
-                type="button"
-                onClick={onCompileRequest}
-                className="pdf-compile-cta-btn"
-              >
-                Compilar código
-              </button>
-            )}
-          </div>
-        )}
+      {compileStatus === 'failed' && hasPages && (
+        <div className="pdf-stale-banner">Mostrando la versión anterior: la última compilación tuvo errores</div>
+      )}
+
+      <div
+        ref={scrollRef}
+        className={`pdfjs-scroll ${hasPages ? 'has-pages' : ''} ${isCompiling && hasPages ? 'is-compiling' : ''}`}
+        onScroll={handleScroll}
+      >
+        {renderContent()}
       </div>
     </div>
   )

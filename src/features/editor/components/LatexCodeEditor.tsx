@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import type { CompilationError } from '../../../types/document'
 import {
   COMMAND_SUGGESTIONS,
@@ -6,8 +6,16 @@ import {
   type SuggestionItem,
   type SuggestionMatch,
 } from '../data/latexSuggestions'
+import { applyFormatting, type FormattingAction } from '../utils/latexFormatting'
+
+/** Operaciones que otros componentes (barra de formato, menús) pueden pedirle al editor. */
+export interface LatexEditorHandle {
+  format: (action: Pick<FormattingAction, 'before' | 'after' | 'placeholder'>) => void
+  toggleFind: () => void
+}
 
 interface LatexCodeEditorProps {
+  ref?: Ref<LatexEditorHandle>
   value: string
   onChange: (value: string) => void
   onSave?: () => void
@@ -66,6 +74,7 @@ function highlightLatex(code: string): string {
 }
 
 export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
+  ref,
   value,
   onChange,
   onSave,
@@ -91,6 +100,24 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
   const [activeMatch, setActiveMatch] = useState<SuggestionMatch | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [suggestPos, setSuggestPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      format: (action) => {
+        const textarea = textareaRef.current
+        if (!textarea || readOnly) return
+        const edit = applyFormatting(value, textarea.selectionStart, textarea.selectionEnd, action)
+        onChange(edit.value)
+        requestAnimationFrame(() => {
+          textarea.focus()
+          textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd)
+        })
+      },
+      toggleFind: () => setShowFind((prev) => !prev),
+    }),
+    [value, onChange, readOnly],
+  )
 
   // Mapa de líneas con errores para visualización en el gutter
   const errorMap = useMemo(() => {
