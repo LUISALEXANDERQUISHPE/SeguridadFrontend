@@ -1,107 +1,89 @@
-import React, { useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import type { Project } from '../../types/project'
-import EditorPage from '../editor/EditorPage'
-import ProjectsSidebar from './components/ProjectsSidebar'
+import ProjectDashboard from './ProjectDashboard'
+
+// El editor (incluye pdf.js) se descarga solo cuando el usuario abre un proyecto
+const EditorPage = lazy(() => import('../editor/EditorPage'))
+
+interface EditorTab {
+  id: string
+  name: string
+}
 
 interface WorkspacePageProps {
   displayName: string
+  onSignOut: () => void
 }
 
-export const WorkspacePage: React.FC<WorkspacePageProps> = ({ displayName }) => {
-  // El editor solo se muestra cuando hay un proyecto abierto (creado o seleccionado en la barra lateral)
+/**
+ * Espacio de trabajo autenticado. Igual que Overleaf, muestra el panel de proyectos
+ * y, al abrir uno, el editor a pantalla completa con pestañas para los archivos abiertos.
+ */
+export function WorkspacePage({ displayName, onSignOut }: Readonly<WorkspacePageProps>) {
+  const [openProject, setOpenProject] = useState<Project | null>(null)
   const [openDocumentId, setOpenDocumentId] = useState<string | null>(null)
-  const [isEditorOpen, setIsEditorOpen] = useState(false)
-  const [editorReloadKey, setEditorReloadKey] = useState(0)
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [openTabs, setOpenTabs] = useState<Array<{ id: string; name: string }>>([])
-  const [openProjectId, setOpenProjectId] = useState<string | null>(null)
+  const [openTabs, setOpenTabs] = useState<EditorTab[]>([])
 
+  const openProjectInEditor = (project: Project) => {
+    if (!project.documentId) return
+    setOpenProject(project)
+    setOpenTabs([{ id: project.documentId, name: project.documentName ?? 'Cargando...' }])
+    setOpenDocumentId(project.documentId)
+  }
+
+  const closeEditor = () => {
+    setOpenProject(null)
+    setOpenDocumentId(null)
+    setOpenTabs([])
+  }
+
+  // Abre un archivo del proyecto en una pestaña (o activa la pestaña si ya estaba abierta)
   const handleDocumentOpen = (documentId: string) => {
     if (!documentId) {
       setOpenDocumentId(null)
       return
     }
-    setIsEditorOpen(true)
-    setOpenTabs((previous) => previous.some((tab) => tab.id === documentId)
-      ? previous
-      : [...previous, { id: documentId, name: 'Cargando...' }])
+    setOpenTabs((previous) =>
+      previous.some((tab) => tab.id === documentId) ? previous : [...previous, { id: documentId, name: 'Cargando...' }],
+    )
     setOpenDocumentId(documentId)
   }
 
   const handleDocumentNameLoaded = useCallback((id: string, name: string) => {
-    setOpenTabs((previous) => previous.map((tab) => tab.id === id ? { ...tab, name } : tab))
+    setOpenTabs((previous) => previous.map((tab) => (tab.id === id ? { ...tab, name } : tab)))
   }, [])
 
   const handleTabClose = (documentId: string) => {
-    setOpenTabs((previous) => {
-      const next = previous.filter((tab) => tab.id !== documentId)
-      if (documentId === openDocumentId) {
-        setOpenDocumentId(next[next.length - 1]?.id || null)
-      }
-      return next
-    })
+    const remaining = openTabs.filter((tab) => tab.id !== documentId)
+    setOpenTabs(remaining)
+    if (documentId === openDocumentId) {
+      setOpenDocumentId(remaining.at(-1)?.id ?? null)
+    }
   }
 
   const handleDocumentDeleted = (documentId: string) => {
     setOpenTabs((previous) => previous.filter((tab) => tab.id !== documentId))
   }
 
-  // Si se renombra el proyecto abierto, recargar el editor para reflejar el nuevo nombre
-  const handleProjectUpdated = (project: Project) => {
-    if (project.documentId && project.documentId === openDocumentId) {
-      setEditorReloadKey((prev) => prev + 1)
-    }
-  }
-
-  // Si se archiva o elimina el proyecto abierto, cerrar el editor
-  const handleProjectClosed = (project: Project) => {
-    if (project.documentId && project.documentId === openDocumentId) {
-      setOpenDocumentId(null)
-      setOpenTabs([])
-      setIsEditorOpen(false)
-      setOpenProjectId(null)
-    }
+  if (!openProject) {
+    return <ProjectDashboard displayName={displayName} onOpenProject={openProjectInEditor} onSignOut={onSignOut} />
   }
 
   return (
-    <div className="workspace-root">
-      {!isEditorOpen && (
-        <ProjectsSidebar
-          openDocumentId={openDocumentId}
-          isCreateOpen={isCreateOpen}
-          onCreateOpenChange={setIsCreateOpen}
-          onOpenProject={handleDocumentOpen}
-          onProjectUpdated={handleProjectUpdated}
-          onProjectClosed={handleProjectClosed}
-        />
-      )}
-
-      <div className="workspace-main">
-        {isEditorOpen ? (
-          <EditorPage
-            documentId={openDocumentId}
-            projectId={openProjectId}
-            onDocumentOpen={handleDocumentOpen}
-            onDocumentDeleted={handleDocumentDeleted}
-            openTabs={openTabs}
-            onCloseTab={handleTabClose}
-            onDocumentNameLoaded={handleDocumentNameLoaded}
-          />
-        ) : (
-          <section className="workspace-empty">
-            <span className="eyebrow">Sesión activa</span>
-            <h1>Tu espacio está listo.</h1>
-            <p>
-              Has iniciado sesión como <strong>{displayName}</strong>. Crea un proyecto nuevo o abre uno existente
-              desde la barra lateral para comenzar a escribir.
-            </p>
-            <button type="button" className="submit-button" onClick={() => setIsCreateOpen(true)}>
-              ➕ Nuevo proyecto
-            </button>
-          </section>
-        )}
-      </div>
-    </div>
+    <Suspense fallback={<div className="loading-screen">Abriendo el editor...</div>}>
+      <EditorPage
+        key={openProject.id}
+        documentId={openDocumentId}
+        projectId={openProject.id}
+        projectName={openProject.name}
+        onBack={closeEditor}
+        onDocumentOpen={handleDocumentOpen}
+        onDocumentDeleted={handleDocumentDeleted}
+        openTabs={openTabs}
+        onCloseTab={handleTabClose}
+        onDocumentNameLoaded={handleDocumentNameLoaded}
+      />
+    </Suspense>
   )
 }
 

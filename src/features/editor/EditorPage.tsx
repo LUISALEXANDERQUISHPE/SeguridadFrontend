@@ -14,14 +14,19 @@ import {
   getProjectTree,
   saveDocument,
 } from '../../services/documentService'
-import LatexCodeEditor from './components/LatexCodeEditor'
+import LatexCodeEditor, { type LatexEditorHandle } from './components/LatexCodeEditor'
 import PdfViewer from './components/PdfViewer'
 import CompilationConsole from './components/CompilationConsole'
-import EditorToolbar from './components/EditorToolbar'
 import FileExplorer from './components/FileExplorer'
 import FilePreview from './components/FilePreview'
 import type { ProjectNode } from '../../types/document'
 import { parseBibEntries } from '../../utils/bibtex'
+import IdeMenuBar, { type IdeMenuActions } from './components/IdeMenuBar'
+import IdeRail from './components/IdeRail'
+import FormattingToolbar from './components/FormattingToolbar'
+import type { FormattingAction } from './utils/latexFormatting'
+import type { EditorLayout } from './types'
+import './editor-ide.css'
 
 // El PDF se genera aunque la bibliografía falle (citas como [?]); en ese caso se abre la consola con la explicación
 function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
@@ -29,9 +34,11 @@ function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
 }
 
 interface EditorPageProps {
-  // Documento a editar; el editor solo se muestra al crear o abrir un proyecto desde la barra lateral
+  // Documento activo (pestaña seleccionada); el editor se muestra al abrir un proyecto desde el panel
   documentId: string | null
   projectId: string | null
+  projectName: string
+  onBack: () => void
   onDocumentOpen?: (documentId: string) => void
   onDocumentDeleted?: (documentId: string) => void
   openTabs: Array<{ id: string; name: string }>
@@ -39,7 +46,22 @@ interface EditorPageProps {
   onDocumentNameLoaded: (documentId: string, name: string) => void
 }
 
-export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, onDocumentOpen, onDocumentDeleted, openTabs, onCloseTab, onDocumentNameLoaded }) => {
+export const EditorPage: React.FC<EditorPageProps> = ({
+  documentId,
+  projectId,
+  projectName,
+  onBack,
+  onDocumentOpen,
+  onDocumentDeleted,
+  openTabs,
+  onCloseTab,
+  onDocumentNameLoaded,
+}) => {
+  // Diseño del IDE (paneles visibles)
+  const [layout, setLayout] = useState<EditorLayout>('split')
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState<boolean>(true)
+  const editorRef = useRef<LatexEditorHandle | null>(null)
+
   // Estado del Documento
   const [currentDocument, setCurrentDocument] = useState<LatexDocument | null>(null)
   const [loadedProjectId, setLoadedProjectId] = useState<string | null>(projectId)
@@ -98,7 +120,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
         if (mounted) {
           setCurrentDocument(docData)
           // Se conserva para que el File Tree siga visible aunque se cierren todas las pestañas.
-          setLoadedProjectId(docData.projectId)
+          setLoadedProjectId(docData.projectId ?? projectId)
           onDocumentNameLoaded(documentId, docData.name)
           // Un archivo vacío (ej. un .bib o .csv nuevo) se abre vacío; no se rellena con la plantilla LaTeX
           const initialContent = docData.autoSave?.contenido || (docData.content ?? '')
@@ -147,7 +169,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
         }
       }
     }
-  }, [documentId, onDocumentNameLoaded])
+  }, [documentId, projectId, onDocumentNameLoaded])
 
   // 2. Manejo de Autoguardado con Debounce (isAutoSave: true)
   const triggerAutoSave = useCallback((docId: string, textToSave: string) => {
@@ -453,39 +475,116 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
     }
   }, [isDragging])
 
-  if (isLoading || loadError) {
+  const toggleConsole = () => setIsConsoleOpen((prev) => !prev)
+  const toggleSidePanel = () => setIsSidePanelOpen((prev) => !prev)
+  const isBinaryFile = currentDocument?.isText === false
+
+  // Las acciones del editor de código requieren que el panel de código esté visible
+  const withEditorVisible = (action: (editor: LatexEditorHandle) => void) => {
+    if (layout === 'pdf') setLayout('split')
+    requestAnimationFrame(() => {
+      if (editorRef.current) action(editorRef.current)
+    })
+  }
+
+  const handleFormat = (action: FormattingAction) => withEditorVisible((editor) => editor.format(action))
+  const handleFind = () => withEditorVisible((editor) => editor.toggleFind())
+
+  const menuActions: IdeMenuActions = {
+    onBack,
+    onSave: () => void handleSaveAndCompile(),
+    onDownloadSource: handleDownloadSource,
+    onDownloadPdf: handleDownloadPdf,
+    onFind: handleFind,
+    onInsert: handleFormat,
+    onToggleSidePanel: toggleSidePanel,
+    onToggleConsole: toggleConsole,
+    onLayoutChange: setLayout,
+  }
+
+  const renderEditorPanel = () => {
+    if (isLoading || loadError) {
+      return (
+        <div className="ide-status-screen">
+          {loadError ? (
+            <p className="ide-status-error" role="alert">
+              No fue posible abrir el archivo: {loadError}
+            </p>
+          ) : (
+            <p>Cargando archivo...</p>
+          )}
+        </div>
+      )
+    }
+
+    const preview =
+      isBinaryFile && currentDocument && loadedProjectId ? (
+        <FilePreview
+          projectId={loadedProjectId}
+          node={
+            currentNode || {
+              id: currentDocument.id,
+              proyecto_id: loadedProjectId,
+              padre_id: null,
+              nombre: currentDocument.name,
+              tipo_nodo: 'archivo',
+              tamano_bytes: currentDocument.sizeBytes,
+            }
+          }
+          path={nodePaths.get(currentDocument.id) || currentDocument.name}
+        />
+      ) : undefined
+
     return (
-      <div className="overleaf-editor-root editor-status-screen">
-        {loadError ? (
-          <div className="modal-error">No fue posible abrir el proyecto: {loadError}</div>
-        ) : (
-          <div className="modal-loading">Cargando proyecto...</div>
-        )}
-      </div>
+      <LatexCodeEditor
+        ref={editorRef}
+        value={content}
+        documentId={documentId ?? undefined}
+        openTabs={openTabs}
+        onOpenTab={(id) => onDocumentOpen?.(id)}
+        onCloseTab={onCloseTab}
+        onChange={handleContentChange}
+        onSave={() => void handleSaveAndCompile()}
+        errors={errors}
+        targetLine={targetLine}
+        onLineFocused={handleLineFocused}
+        citations={citations}
+        projectFiles={projectFiles}
+        toolbar={<FormattingToolbar onFormat={handleFormat} onFind={handleFind} />}
+        customBody={preview}
+      />
     )
   }
 
+  const showEditor = layout !== 'pdf'
+  const showPdf = layout !== 'editor'
+  // El panel de código toma un porcentaje fijo y el PDF ocupa el resto: así ningún panel
+  // puede "robarle" espacio al otro por el tamaño de su contenido
+  const editorFlex = showPdf ? `0 0 ${splitPercent}%` : '1 1 0'
+
   return (
-    <div className="overleaf-editor-root">
-      {/* Barra de herramientas superior */}
-      <EditorToolbar
-        documentName={currentDocument?.name || 'Documento sin guardar'}
+    <div className="ide-root">
+      <IdeMenuBar
+        projectName={projectName}
         saveStatus={saveStatus}
-        compileStatus={compileStatus}
         lastSavedAt={lastSavedAt}
-        onSave={() => void handleSaveAndCompile()}
-        onCompile={() => void handleCompile()}
-        onDownloadPdf={handleDownloadPdf}
-        onDownloadSource={handleDownloadSource}
-        onInsertText={handleInsertText}
-        onToggleConsole={() => setIsConsoleOpen((previous) => !previous)}
-        isCompiling={compileStatus === 'compiling'}
-        isSaving={saveStatus === 'saving'}
+        layout={layout}
+        isSidePanelOpen={isSidePanelOpen}
+        isConsoleOpen={isConsoleOpen}
+        actions={menuActions}
       />
 
-      {/* Espacio de trabajo dividido (Editor + Separador + Visor PDF) */}
-      <div className="overleaf-split-container" ref={splitContainerRef}>
-        {loadedProjectId && (
+      <div className="ide-body">
+        <IdeRail
+          isSidePanelOpen={isSidePanelOpen}
+          isConsoleOpen={isConsoleOpen}
+          errorCount={errors.length}
+          onToggleSidePanel={toggleSidePanel}
+          onFind={handleFind}
+          onToggleConsole={toggleConsole}
+        />
+
+        {isSidePanelOpen && loadedProjectId && (
           <FileExplorer
             projectId={loadedProjectId}
             currentDocumentId={currentDocument?.id || ''}
@@ -494,9 +593,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
             onOpenDocument={(id) => onDocumentOpen?.(id)}
             onDocumentDeleted={(id) => onDocumentDeleted?.(id)}
             onDocumentRenamed={(id, name) => {
-              if (id === currentDocument.id) setCurrentDocument((previous) => previous ? { ...previous, name } : previous)
+              if (id === currentDocument?.id) {
+                setCurrentDocument((previous) => (previous ? { ...previous, name } : previous))
+              }
             }}
             onNavigateToLine={(line) => {
+              if (layout === 'pdf') setLayout('split')
               setTargetLine(null)
               setTimeout(() => setTargetLine(line), 20)
             }}
@@ -505,71 +607,59 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectId, o
             refreshKey={documentId || ''}
           />
         )}
-        {/* Panel Izquierdo: Editor LaTeX */}
-        <div
-          className="overleaf-panel panel-left"
-          style={{ width: `${splitPercent}%` }}
-        >
-          <LatexCodeEditor
-            value={content}
-            documentId={documentId}
-            openTabs={openTabs}
-            onOpenTab={(id) => onDocumentOpen?.(id)}
-            onCloseTab={onCloseTab}
-            onChange={handleContentChange}
-            onSave={() => void handleSaveAndCompile()}
+
+        <div className="overleaf-editor-root ide-workspace">
+          <div className="overleaf-split-container" ref={splitContainerRef}>
+            {showEditor && (
+              <section
+                className="overleaf-panel panel-left ide-code-panel"
+                style={{ flex: editorFlex }}
+                aria-label="Código fuente"
+              >
+                {renderEditorPanel()}
+              </section>
+            )}
+
+            {showEditor && showPdf && (
+              <div
+                className={`overleaf-splitter ${isDragging ? 'dragging' : ''}`}
+                onMouseDown={handleMouseDown}
+                title="Arrastra para redimensionar los paneles"
+                aria-hidden="true"
+              >
+                <div className="splitter-handle" />
+              </div>
+            )}
+
+            {showPdf && (
+              <section className="overleaf-panel panel-right ide-pdf-panel" aria-label="Vista previa PDF">
+                <PdfViewer
+                  documentId={currentDocument?.id || null}
+                  documentName={currentDocument?.name || `${projectName}.tex`}
+                  pdfUrl={pdfUrl}
+                  previousPdfUrl={previousPdfUrl}
+                  compileStatus={compileStatus}
+                  compileTimestamp={compileTimestamp}
+                  isCompiling={compileStatus === 'compiling'}
+                  onCompileRequest={() => void handleCompile()}
+                  errorCount={errors.length}
+                  onToggleLogs={toggleConsole}
+                />
+              </section>
+            )}
+          </div>
+
+          <CompilationConsole
             errors={errors}
-            targetLine={targetLine}
-            onLineFocused={handleLineFocused}
-            citations={citations}
-            projectFiles={projectFiles}
-            customBody={currentDocument?.isText === false && loadedProjectId ? (
-              <FilePreview
-                projectId={loadedProjectId}
-                node={currentNode || { id: currentDocument.id, proyecto_id: loadedProjectId, padre_id: null, nombre: currentDocument.name, tipo_nodo: 'archivo', tamano_bytes: currentDocument.sizeBytes }}
-                path={nodePaths.get(currentDocument.id) || currentDocument.name}
-              />
-            ) : undefined}
-          />
-        </div>
-
-        {/* Separador arrastrable */}
-        <div
-          className={`overleaf-splitter ${isDragging ? 'dragging' : ''}`}
-          onMouseDown={handleMouseDown}
-          title="Arrastra para redimensionar los paneles"
-        >
-          <div className="splitter-handle" />
-        </div>
-
-        {/* Panel Derecho: Visor PDF */}
-        <div
-          className="overleaf-panel panel-right"
-          style={{ width: `${100 - splitPercent}%` }}
-        >
-          <PdfViewer
-            documentId={currentDocument?.id || null}
-            documentName={currentDocument?.name || 'documento.pdf'}
-            pdfUrl={pdfUrl}
-            previousPdfUrl={previousPdfUrl}
-            compileStatus={compileStatus}
-            compileTimestamp={compileTimestamp}
-            isCompiling={compileStatus === 'compiling'}
-            onCompileRequest={() => void handleCompile()}
+            warnings={warnings}
+            log={compilationLog}
+            compilationTime={compilationTime}
+            onErrorClick={(line, file) => void handleErrorClick(line, file)}
+            isOpen={isConsoleOpen}
+            onToggleOpen={toggleConsole}
           />
         </div>
       </div>
-
-      {/* Consola inferior de errores y logs */}
-      <CompilationConsole
-        errors={errors}
-        warnings={warnings}
-        log={compilationLog}
-        compilationTime={compilationTime}
-        onErrorClick={(line, file) => void handleErrorClick(line, file)}
-        isOpen={isConsoleOpen}
-        onToggleOpen={() => setIsConsoleOpen((prev) => !prev)}
-      />
     </div>
   )
 }

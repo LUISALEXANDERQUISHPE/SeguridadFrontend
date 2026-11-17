@@ -301,19 +301,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
         {contextMenu.node && <button type="button" className="danger" onClick={() => { setNodeToDelete(contextMenu.node); setContextMenu(null) }}>× Eliminar</button>}
       </div>
     )}
-    <ConfirmModal
-      isOpen={nodeToDelete !== null}
-      title="Eliminar elemento"
-      message={nodeToDelete ? `¿Eliminar "${nodeToDelete.nombre}"${nodeToDelete.tipo_nodo === 'carpeta' ? ' y todo su contenido' : ''}? Esta acción no se puede deshacer.` : ''}
-      confirmLabel="Eliminar"
-      confirmingLabel="Eliminando..."
-      danger
-      onClose={() => setNodeToDelete(null)}
-      onConfirm={async () => {
-        if (nodeToDelete) await removeNode(nodeToDelete)
-        setNodeToDelete(null)
-      }}
-    />
+    {nodeToDelete && (
+      <ConfirmModal
+        title="Eliminar elemento"
+        message={`¿Eliminar "${nodeToDelete.nombre}"${nodeToDelete.tipo_nodo === 'carpeta' ? ' y todo su contenido' : ''}? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        confirmingLabel="Eliminando..."
+        danger
+        onClose={() => setNodeToDelete(null)}
+        onConfirm={() => removeNode(nodeToDelete)}
+      />
+    )}
   </aside>
 }
 
