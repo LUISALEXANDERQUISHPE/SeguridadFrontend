@@ -29,6 +29,15 @@ interface IdeMenuBarProps {
 
 const LAYOUT_ORDER: readonly EditorLayout[] = ['split', 'editor', 'pdf']
 
+const HELP_LINKS = [
+  { id: 'shortcuts', label: 'Atajos de teclado', url: 'https://www.overleaf.com/learn/latex/TeX_keyboard_shortcuts' },
+  { id: 'docs', label: 'Documentación de LaTeX', url: 'https://www.overleaf.com/learn/latex' },
+] as const
+
+function openExternal(url: string) {
+  globalThis.open(url, '_blank', 'noopener,noreferrer')
+}
+
 /** Barra superior del editor: menús, nombre del proyecto, estado de guardado y diseño. */
 export function IdeMenuBar({
   projectName,
@@ -63,6 +72,12 @@ export function IdeMenuBar({
     { id: 'logs', label: 'Registro de compilación', checked: isConsoleOpen, onSelect: actions.onToggleConsole },
   ]
 
+  const helpItems: DropdownMenuItem[] = HELP_LINKS.map((link) => ({
+    id: link.id,
+    label: link.label,
+    onSelect: () => openExternal(link.url),
+  }))
+
   const layoutItems: DropdownMenuItem[] = LAYOUT_ORDER.map((option) => ({
     id: option,
     label: LAYOUT_LABELS[option],
@@ -88,6 +103,7 @@ export function IdeMenuBar({
           <DropdownMenu label="Insertar" items={insertItems} />
           <DropdownMenu label="Formato" items={formatItems} />
           <DropdownMenu label="Ver" items={viewItems} />
+          <DropdownMenu label="Ayuda" items={helpItems} />
         </nav>
       </div>
 

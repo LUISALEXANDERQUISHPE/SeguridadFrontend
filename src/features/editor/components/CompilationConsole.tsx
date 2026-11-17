@@ -6,7 +6,8 @@ interface CompilationConsoleProps {
   warnings: CompilationError[]
   log?: string
   compilationTime?: number
-  onErrorClick: (line: number) => void
+  // file: ruta relativa al proyecto del archivo con el error (ej. "capitulos/intro.tex")
+  onErrorClick: (line: number, file?: string) => void
   isOpen: boolean
   onToggleOpen: () => void
 }
@@ -164,7 +165,7 @@ export const CompilationConsole: React.FC<CompilationConsoleProps> = ({
                     <div
                       key={`err-${idx}`}
                       className="console-issue-item item-error"
-                      onClick={() => err.line && onErrorClick(err.line)}
+                      onClick={() => err.line && onErrorClick(err.line, err.file)}
                       role="button"
                       tabIndex={0}
                       title={`Haz clic para ir a la línea ${err.line || '?'}`}
@@ -198,7 +199,7 @@ export const CompilationConsole: React.FC<CompilationConsoleProps> = ({
                     <div
                       key={`warn-${idx}`}
                       className="console-issue-item item-warning"
-                      onClick={() => warn.line && onErrorClick(warn.line)}
+                      onClick={() => warn.line && onErrorClick(warn.line, warn.file)}
                       role="button"
                       tabIndex={0}
                       title={`Haz clic para ir a la línea ${warn.line || '?'}`}

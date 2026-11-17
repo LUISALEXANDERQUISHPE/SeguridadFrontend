@@ -11,37 +11,60 @@ import {
   downloadPdfFile,
   downloadSourceFile,
   getDocument,
+  getProjectTree,
   saveDocument,
 } from '../../services/documentService'
-import Icon from '../../components/common/Icon'
 import LatexCodeEditor, { type LatexEditorHandle } from './components/LatexCodeEditor'
 import PdfViewer from './components/PdfViewer'
 import CompilationConsole from './components/CompilationConsole'
+import FileExplorer from './components/FileExplorer'
+import FilePreview from './components/FilePreview'
+import type { ProjectNode } from '../../types/document'
+import { parseBibEntries } from '../../utils/bibtex'
 import IdeMenuBar, { type IdeMenuActions } from './components/IdeMenuBar'
 import IdeRail from './components/IdeRail'
-import IdeSidePanel from './components/IdeSidePanel'
 import FormattingToolbar from './components/FormattingToolbar'
-import { parseOutline } from './utils/latexOutline'
 import type { FormattingAction } from './utils/latexFormatting'
 import type { EditorLayout } from './types'
 import './editor-ide.css'
 
-interface EditorPageProps {
-  // Documento a editar; el editor se muestra al crear o abrir un proyecto desde el panel de proyectos
-  documentId: string
-  projectName: string
-  onBack: () => void
+// El PDF se genera aunque la bibliografía falle (citas como [?]); en ese caso se abre la consola con la explicación
+function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
+  return warnings.some((warning) => Boolean(warning.friendlyMessage) && (warning.file === 'bibtex' || warning.file === 'biber' || /bibliograf/i.test(warning.message)))
 }
 
-export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName, onBack }) => {
+interface EditorPageProps {
+  // Documento activo (pestaña seleccionada); el editor se muestra al abrir un proyecto desde el panel
+  documentId: string | null
+  projectId: string | null
+  projectName: string
+  onBack: () => void
+  onDocumentOpen?: (documentId: string) => void
+  onDocumentDeleted?: (documentId: string) => void
+  openTabs: Array<{ id: string; name: string }>
+  onCloseTab: (documentId: string) => void
+  onDocumentNameLoaded: (documentId: string, name: string) => void
+}
+
+export const EditorPage: React.FC<EditorPageProps> = ({
+  documentId,
+  projectId,
+  projectName,
+  onBack,
+  onDocumentOpen,
+  onDocumentDeleted,
+  openTabs,
+  onCloseTab,
+  onDocumentNameLoaded,
+}) => {
   // Diseño del IDE (paneles visibles)
   const [layout, setLayout] = useState<EditorLayout>('split')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState<boolean>(true)
-  const [activeOutlineLine, setActiveOutlineLine] = useState<number | null>(null)
   const editorRef = useRef<LatexEditorHandle | null>(null)
 
   // Estado del Documento
   const [currentDocument, setCurrentDocument] = useState<LatexDocument | null>(null)
+  const [loadedProjectId, setLoadedProjectId] = useState<string | null>(projectId)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [content, setContent] = useState<string>(DEFAULT_LATEX_TEMPLATE)
@@ -70,6 +93,13 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
   // Referencias para debounce y control de cambios
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isInitialLoadRef = useRef<boolean>(true)
+  // Línea a la que saltar cuando termine de cargar el archivo abierto desde un error de compilación
+  const pendingLineRef = useRef<number | null>(null)
+
+  // Árbol del proyecto (lo carga el FileExplorer) y últimos textos editados en esta sesión, por si
+  // el autoguardado de un .bib aún no llegó al servidor al cambiar de pestaña
+  const [projectNodes, setProjectNodes] = useState<ProjectNode[]>([])
+  const [editedContents, setEditedContents] = useState<Record<string, string>>({})
   const contentRef = useRef<string>(content)
   contentRef.current = content
 
@@ -78,11 +108,22 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
     let mounted = true
 
     const initDocument = async () => {
+      if (!documentId) {
+        setCurrentDocument(null)
+        setContent('')
+        setLoadError(null)
+        setIsLoading(false)
+        return
+      }
       try {
         const docData = await getDocument(documentId)
         if (mounted) {
           setCurrentDocument(docData)
-          const initialContent = docData.autoSave?.contenido || docData.content || DEFAULT_LATEX_TEMPLATE
+          // Se conserva para que el File Tree siga visible aunque se cierren todas las pestañas.
+          setLoadedProjectId(docData.projectId ?? projectId)
+          onDocumentNameLoaded(documentId, docData.name)
+          // Un archivo vacío (ej. un .bib o .csv nuevo) se abre vacío; no se rellena con la plantilla LaTeX
+          const initialContent = docData.autoSave?.contenido || (docData.content ?? '')
           setContent(initialContent)
           setSaveStatus('saved')
           setLastSavedAt(docData.updatedAt ? new Date(docData.updatedAt).toLocaleTimeString() : null)
@@ -97,6 +138,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
             setCompileStatus(docData.lastCompilation?.status === 'fallida' ? 'failed' : 'idle')
           }
           setIsLoading(false)
+          if (pendingLineRef.current) {
+            const line = pendingLineRef.current
+            pendingLineRef.current = null
+            setTimeout(() => setTargetLine(line), 50)
+          }
         }
       } catch (err: unknown) {
         if (mounted) {
@@ -118,10 +164,12 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current)
         autoSaveTimerRef.current = null
-        saveDocument(documentId, contentRef.current, true).catch(() => {})
+        if (documentId) {
+          saveDocument(documentId, contentRef.current, true).catch(() => {})
+        }
       }
     }
-  }, [documentId])
+  }, [documentId, projectId, onDocumentNameLoaded])
 
   // 2. Manejo de Autoguardado con Debounce (isAutoSave: true)
   const triggerAutoSave = useCallback((docId: string, textToSave: string) => {
@@ -145,11 +193,34 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
   }, [])
 
   const handleContentChange = (newContent: string) => {
+    // Los binarios (imágenes, PDFs...) no se editan: guardarlos como texto los corrompería
+    if (currentDocument?.isText === false) return
     setContent(newContent)
+    if (currentDocument?.id && /\.bib$/i.test(currentDocument.name)) {
+      setEditedContents((previous) => ({ ...previous, [currentDocument.id]: newContent }))
+    }
     if (!isInitialLoadRef.current && currentDocument?.id) {
       triggerAutoSave(currentDocument.id, newContent)
     } else if (!currentDocument?.id) {
       setSaveStatus('unsaved')
+    }
+  }
+
+  const handleInsertText = (text: string) => {
+    const editor = document.querySelector<HTMLTextAreaElement>('.editor-textarea')
+    const currentText = contentRef.current
+    const start = editor?.selectionStart ?? currentText.length
+    const end = editor?.selectionEnd ?? start
+    const nextContent = `${currentText.slice(0, start)}${text}${currentText.slice(end)}`
+
+    handleContentChange(nextContent)
+
+    if (editor) {
+      const cursorPosition = start + text.length
+      requestAnimationFrame(() => {
+        editor.focus()
+        editor.setSelectionRange(cursorPosition, cursorPosition)
+      })
     }
   }
 
@@ -167,9 +238,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
       autoSaveTimerRef.current = null
     }
 
-    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false
-    setSaveStatus('saving')
-    try {
+    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false (los binarios no se guardan como texto)
+    if (currentDocument.isText !== false) setSaveStatus('saving')
+    if (currentDocument.isText !== false) try {
       const res = await saveDocument(currentDocument.id, currentText, false, 'Guardado manual (Ctrl+S)')
       setSaveStatus('saved')
       setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
@@ -188,6 +259,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
       setCompilationTime(compRes.compilationTime)
       setErrors(compRes.errors || [])
       setWarnings(compRes.warnings || [])
+      setCompileTimestamp(Date.now())
 
       if (compRes.success) {
         setCompileStatus('success')
@@ -196,7 +268,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
           setPdfUrl(compRes.pdfUrl)
           setPreviousPdfUrl(compRes.pdfUrl)
         }
-        setCompileTimestamp(Date.now())
+        if (hasBibliographyProblem(compRes.warnings)) setIsConsoleOpen(true)
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -252,6 +324,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
       setCompilationTime(res.compilationTime)
       setErrors(res.errors || [])
       setWarnings(res.warnings || [])
+      setCompileTimestamp(Date.now())
 
       if (res.success) {
         setCompileStatus('success')
@@ -259,7 +332,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
           setPdfUrl(res.pdfUrl)
           setPreviousPdfUrl(res.pdfUrl)
         }
-        setCompileTimestamp(Date.now())
+        if (hasBibliographyProblem(res.warnings)) setIsConsoleOpen(true)
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -303,17 +376,75 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
     void downloadSourceFile(currentDocument.id, currentDocument.name, content)
   }
 
-  // 6. Navegación a la línea seleccionada en la consola
-  const handleErrorClick = useCallback((line: number) => {
+  // 6. Navegación a la línea seleccionada en la consola (abre el archivo si el error está en otro, ej. capitulos/intro.tex)
+  const handleErrorClick = useCallback(async (line: number, file?: string) => {
+    if (file && loadedProjectId && currentDocument) {
+      try {
+        const { nodes } = await getProjectTree(loadedProjectId)
+        const byId = new Map(nodes.map((node) => [node.id, node]))
+        const pathOf = (nodeId: string): string => {
+          const parts: string[] = []
+          let current = byId.get(nodeId)
+          while (current && parts.length < 64) {
+            parts.unshift(current.nombre)
+            current = current.padre_id ? byId.get(current.padre_id) : undefined
+          }
+          return parts.join('/')
+        }
+        const normalized = file.replace(/\\/g, '/').replace(/^\.\//, '')
+        const files = nodes.filter((node) => node.tipo_nodo === 'archivo')
+        const target = files.find((node) => pathOf(node.id) === normalized)
+          || files.find((node) => pathOf(node.id).endsWith(`/${normalized}`))
+        if (target && target.id !== currentDocument.id) {
+          pendingLineRef.current = line
+          onDocumentOpen?.(target.id)
+          return
+        }
+      } catch {
+        // Si no se puede cargar el árbol, saltar a la línea en el archivo actual
+      }
+    }
     setTargetLine(null)
     setTimeout(() => {
       setTargetLine(line)
     }, 20)
-  }, [])
+  }, [loadedProjectId, currentDocument, onDocumentOpen])
 
   const handleLineFocused = useCallback(() => {
     setTargetLine(null)
   }, [])
+
+  // Rutas relativas de los archivos del proyecto (ej. "imagenes/logo.png")
+  const nodePaths = useMemo(() => {
+    const byId = new Map(projectNodes.map((node) => [node.id, node]))
+    const paths = new Map<string, string>()
+    projectNodes.forEach((node) => {
+      const parts: string[] = []
+      let current: ProjectNode | undefined = node
+      while (current && parts.length < 64) {
+        parts.unshift(current.nombre)
+        current = current.padre_id ? byId.get(current.padre_id) : undefined
+      }
+      paths.set(node.id, parts.join('/'))
+    })
+    return paths
+  }, [projectNodes])
+
+  // Entradas de todos los .bib del proyecto, para sugerirlas dentro de \cite{...}
+  const citations = useMemo(() => {
+    const seen = new Set<string>()
+    return projectNodes
+      .filter((node) => node.tipo_nodo === 'archivo' && /\.bib$/i.test(node.nombre))
+      .flatMap((node) => parseBibEntries(editedContents[node.id] ?? node.contenido_actual ?? '', nodePaths.get(node.id) || node.nombre))
+      .filter((entry) => !seen.has(entry.key) && Boolean(seen.add(entry.key)))
+  }, [projectNodes, editedContents, nodePaths])
+
+  const projectFiles = useMemo(
+    () => projectNodes.filter((node) => node.tipo_nodo === 'archivo').map((node) => nodePaths.get(node.id) || node.nombre),
+    [projectNodes, nodePaths]
+  )
+
+  const currentNode = currentDocument?.isText === false ? projectNodes.find((node) => node.id === currentDocument.id) : undefined
 
   // 7. Manejo de redimensionamiento de paneles (Split Drag)
   const handleMouseDown = () => {
@@ -344,11 +475,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
     }
   }, [isDragging])
 
-  const outline = useMemo(() => parseOutline(content), [content])
-  const documentName = currentDocument?.name || `${projectName}.tex`
-
   const toggleConsole = () => setIsConsoleOpen((prev) => !prev)
   const toggleSidePanel = () => setIsSidePanelOpen((prev) => !prev)
+  const isBinaryFile = currentDocument?.isText === false
 
   // Las acciones del editor de código requieren que el panel de código esté visible
   const withEditorVisible = (action: (editor: LatexEditorHandle) => void) => {
@@ -360,12 +489,6 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
 
   const handleFormat = (action: FormattingAction) => withEditorVisible((editor) => editor.format(action))
   const handleFind = () => withEditorVisible((editor) => editor.toggleFind())
-
-  const handleOutlineSelect = (line: number) => {
-    setActiveOutlineLine(line)
-    if (layout === 'pdf') setLayout('split')
-    handleErrorClick(line)
-  }
 
   const menuActions: IdeMenuActions = {
     onBack,
@@ -379,82 +502,65 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
     onLayoutChange: setLayout,
   }
 
-  const renderWorkspace = () => {
+  const renderEditorPanel = () => {
     if (isLoading || loadError) {
       return (
         <div className="ide-status-screen">
           {loadError ? (
             <p className="ide-status-error" role="alert">
-              No fue posible abrir el proyecto: {loadError}
+              No fue posible abrir el archivo: {loadError}
             </p>
           ) : (
-            <p>Cargando proyecto...</p>
+            <p>Cargando archivo...</p>
           )}
         </div>
       )
     }
 
-    const showEditor = layout !== 'pdf'
-    const showPdf = layout !== 'editor'
-    // El panel de código toma un porcentaje fijo y el PDF ocupa el resto: así ningún panel
-    // puede "robarle" espacio al otro por el tamaño de su contenido
-    const editorFlex = showPdf ? `0 0 ${splitPercent}%` : '1 1 0'
+    const preview =
+      isBinaryFile && currentDocument && loadedProjectId ? (
+        <FilePreview
+          projectId={loadedProjectId}
+          node={
+            currentNode || {
+              id: currentDocument.id,
+              proyecto_id: loadedProjectId,
+              padre_id: null,
+              nombre: currentDocument.name,
+              tipo_nodo: 'archivo',
+              tamano_bytes: currentDocument.sizeBytes,
+            }
+          }
+          path={nodePaths.get(currentDocument.id) || currentDocument.name}
+        />
+      ) : undefined
 
     return (
-      <div className="overleaf-split-container" ref={splitContainerRef}>
-        {showEditor && (
-          <section className="overleaf-panel panel-left ide-code-panel" style={{ flex: editorFlex }} aria-label="Código fuente">
-            <div className="ide-file-tabs">
-              <span className="ide-file-tab is-active" title={documentName}>
-                <Icon name="file" size={14} />
-                {documentName}
-              </span>
-            </div>
-            <FormattingToolbar onFormat={handleFormat} onFind={handleFind} />
-            <div className="ide-code-body">
-              <LatexCodeEditor
-                ref={editorRef}
-                value={content}
-                onChange={handleContentChange}
-                onSave={() => void handleSaveAndCompile()}
-                errors={errors}
-                targetLine={targetLine}
-                onLineFocused={handleLineFocused}
-              />
-            </div>
-          </section>
-        )}
-
-        {showEditor && showPdf && (
-          <div
-            className={`overleaf-splitter ${isDragging ? 'dragging' : ''}`}
-            onMouseDown={handleMouseDown}
-            title="Arrastra para redimensionar los paneles"
-            aria-hidden="true"
-          >
-            <div className="splitter-handle" />
-          </div>
-        )}
-
-        {showPdf && (
-          <section className="overleaf-panel panel-right ide-pdf-panel" aria-label="Vista previa PDF">
-            <PdfViewer
-              documentId={currentDocument?.id || null}
-              documentName={documentName}
-              pdfUrl={pdfUrl}
-              previousPdfUrl={previousPdfUrl}
-              compileStatus={compileStatus}
-              compileTimestamp={compileTimestamp}
-              isCompiling={compileStatus === 'compiling'}
-              onCompileRequest={() => void handleCompile()}
-              errorCount={errors.length}
-              onToggleLogs={toggleConsole}
-            />
-          </section>
-        )}
-      </div>
+      <LatexCodeEditor
+        ref={editorRef}
+        value={content}
+        documentId={documentId ?? undefined}
+        openTabs={openTabs}
+        onOpenTab={(id) => onDocumentOpen?.(id)}
+        onCloseTab={onCloseTab}
+        onChange={handleContentChange}
+        onSave={() => void handleSaveAndCompile()}
+        errors={errors}
+        targetLine={targetLine}
+        onLineFocused={handleLineFocused}
+        citations={citations}
+        projectFiles={projectFiles}
+        toolbar={<FormattingToolbar onFormat={handleFormat} onFind={handleFind} />}
+        customBody={preview}
+      />
     )
   }
+
+  const showEditor = layout !== 'pdf'
+  const showPdf = layout !== 'editor'
+  // El panel de código toma un porcentaje fijo y el PDF ocupa el resto: así ningún panel
+  // puede "robarle" espacio al otro por el tamaño de su contenido
+  const editorFlex = showPdf ? `0 0 ${splitPercent}%` : '1 1 0'
 
   return (
     <div className="ide-root">
@@ -478,24 +584,77 @@ export const EditorPage: React.FC<EditorPageProps> = ({ documentId, projectName,
           onToggleConsole={toggleConsole}
         />
 
-        {isSidePanelOpen && (
-          <IdeSidePanel
-            fileName={documentName}
-            outline={outline}
-            activeLine={activeOutlineLine}
-            onOutlineSelect={handleOutlineSelect}
+        {isSidePanelOpen && loadedProjectId && (
+          <FileExplorer
+            projectId={loadedProjectId}
+            currentDocumentId={currentDocument?.id || ''}
+            currentContent={content}
+            outlineVersion={compileTimestamp}
+            onOpenDocument={(id) => onDocumentOpen?.(id)}
+            onDocumentDeleted={(id) => onDocumentDeleted?.(id)}
+            onDocumentRenamed={(id, name) => {
+              if (id === currentDocument?.id) {
+                setCurrentDocument((previous) => (previous ? { ...previous, name } : previous))
+              }
+            }}
+            onNavigateToLine={(line) => {
+              if (layout === 'pdf') setLayout('split')
+              setTargetLine(null)
+              setTimeout(() => setTargetLine(line), 20)
+            }}
+            onInsertText={handleInsertText}
+            onNodesLoaded={setProjectNodes}
+            refreshKey={documentId || ''}
           />
         )}
 
         <div className="overleaf-editor-root ide-workspace">
-          {renderWorkspace()}
+          <div className="overleaf-split-container" ref={splitContainerRef}>
+            {showEditor && (
+              <section
+                className="overleaf-panel panel-left ide-code-panel"
+                style={{ flex: editorFlex }}
+                aria-label="Código fuente"
+              >
+                {renderEditorPanel()}
+              </section>
+            )}
+
+            {showEditor && showPdf && (
+              <div
+                className={`overleaf-splitter ${isDragging ? 'dragging' : ''}`}
+                onMouseDown={handleMouseDown}
+                title="Arrastra para redimensionar los paneles"
+                aria-hidden="true"
+              >
+                <div className="splitter-handle" />
+              </div>
+            )}
+
+            {showPdf && (
+              <section className="overleaf-panel panel-right ide-pdf-panel" aria-label="Vista previa PDF">
+                <PdfViewer
+                  documentId={currentDocument?.id || null}
+                  documentName={currentDocument?.name || `${projectName}.tex`}
+                  pdfUrl={pdfUrl}
+                  previousPdfUrl={previousPdfUrl}
+                  compileStatus={compileStatus}
+                  compileTimestamp={compileTimestamp}
+                  isCompiling={compileStatus === 'compiling'}
+                  onCompileRequest={() => void handleCompile()}
+                  errorCount={errors.length}
+                  onToggleLogs={toggleConsole}
+                />
+              </section>
+            )}
+          </div>
 
           <CompilationConsole
             errors={errors}
             warnings={warnings}
             log={compilationLog}
             compilationTime={compilationTime}
-            onErrorClick={handleErrorClick}
+            onErrorClick={(line, file) => void handleErrorClick(line, file)}
             isOpen={isConsoleOpen}
             onToggleOpen={toggleConsole}
           />

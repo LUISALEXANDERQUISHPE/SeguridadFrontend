@@ -745,6 +745,170 @@
   font: 700 10px/16px var(--ide-font, sans-serif);
 }
 
+/* ---------- Explorador de archivos (FileExplorer) en tema oscuro ---------- */
+.ide-root .file-explorer {
+  width: 260px;
+  flex: 0 0 260px;
+  background: var(--ide-bg);
+  color: var(--ide-text);
+  border-right-color: var(--ide-border);
+  font-family: var(--ide-font);
+}
+
+.ide-root .file-explorer-collapsed {
+  background: var(--ide-bg);
+  color: var(--ide-focus);
+  border-right-color: var(--ide-border);
+}
+
+.ide-root .file-tree-header {
+  border-bottom-color: var(--ide-border);
+}
+
+.ide-root .file-tree-header button,
+.ide-root .file-tree-add {
+  color: var(--ide-muted);
+}
+
+.ide-root .file-tree-header button:hover,
+.ide-root .file-tree-add:hover {
+  background: var(--ide-hover);
+  color: var(--ide-text);
+}
+
+.ide-root .file-tree-item {
+  color: var(--ide-text);
+  font-size: 14px;
+}
+
+.ide-root .file-tree-item:hover {
+  background: var(--ide-hover);
+  color: #fff;
+}
+
+.ide-root .file-tree-item.active {
+  background: var(--ide-selected);
+  color: #fff;
+  font-weight: 600;
+}
+
+.ide-root .file-tree-item.drop-target,
+.ide-root .file-tree-row.drop-target {
+  background: var(--ide-hover);
+  outline-color: var(--ide-focus);
+}
+
+.ide-root .file-tree-rename-input {
+  background: var(--ide-code-bg);
+  border-color: var(--ide-focus);
+  color: var(--ide-text);
+}
+
+.ide-root .file-tree-extension,
+.ide-root .file-outline-empty {
+  color: var(--ide-muted);
+}
+
+.ide-root .file-outline {
+  border-top-color: var(--ide-border);
+}
+
+.ide-root .outline-item {
+  color: var(--ide-text);
+}
+
+.ide-root .outline-item:hover {
+  background: var(--ide-hover);
+  color: #fff;
+}
+
+.ide-root .outline-item.level-3 {
+  color: var(--ide-muted);
+}
+
+.ide-root .file-context-menu {
+  background: var(--ide-surface);
+  border-color: var(--ide-border);
+  box-shadow: 0 14px 32px rgb(0 0 0 / 45%);
+}
+
+.ide-root .file-context-menu button {
+  color: var(--ide-text);
+}
+
+.ide-root .file-context-menu button:hover {
+  background: var(--ide-hover);
+  color: #fff;
+}
+
+.ide-root .file-context-menu button.danger {
+  color: #ff9b95;
+}
+
+.ide-root .file-explorer-error {
+  background: #4a2327;
+  color: #ffd2d2;
+}
+
+/* ---------- Pestañas de archivos abiertos ---------- */
+.ide-root .editor-tabs-in-panel {
+  height: 36px;
+  flex: 0 0 36px;
+  padding: 4px 6px 0;
+  background: var(--ide-bg);
+  border-bottom: 0;
+}
+
+.ide-root .editor-file-tab-path {
+  height: 32px;
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--ide-muted);
+}
+
+.ide-root .editor-file-tab-path.active {
+  background: var(--ide-surface);
+  color: var(--ide-text);
+}
+
+.ide-root .editor-file-tab-path > button:first-child {
+  font-size: 13px;
+}
+
+.ide-root .editor-tab-file-icon {
+  color: var(--ide-focus);
+}
+
+.ide-root .editor-tab-close:hover {
+  color: #ff9b95;
+}
+
+/* ---------- Vista previa de archivos binarios (FilePreview) ---------- */
+.ide-root .file-preview-panel {
+  background: #2b3240;
+}
+
+.ide-root .file-preview-info {
+  background: var(--ide-surface);
+  border-top-color: var(--ide-border);
+}
+
+.ide-root .file-preview-meta {
+  color: var(--ide-text);
+}
+
+.ide-root .file-preview-meta span,
+.ide-root .file-preview-hint {
+  color: var(--ide-muted);
+}
+
+.ide-root .file-preview-download {
+  background: var(--ide-hover);
+  border-color: var(--ide-border);
+  color: var(--ide-text);
+}
+
 /* ---------- Responsivo ---------- */
 @media (max-width: 900px) {
   .ide-side-panel {

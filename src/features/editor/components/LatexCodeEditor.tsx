@@ -6,6 +6,8 @@ import {
   type SuggestionItem,
   type SuggestionMatch,
 } from '../data/latexSuggestions'
+import type { BibEntry } from '../../../utils/bibtex'
+import { isImageFileName } from '../../../utils/fileTypes'
 import { applyFormatting, type FormattingAction } from '../utils/latexFormatting'
 
 /** Operaciones que otros componentes (barra de formato, menús) pueden pedirle al editor. */
@@ -23,6 +25,18 @@ interface LatexCodeEditorProps {
   targetLine?: number | null
   onLineFocused?: () => void
   readOnly?: boolean
+  documentId?: string
+  openTabs?: Array<{ id: string; name: string }>
+  onOpenTab?: (id: string) => void
+  onCloseTab?: (id: string) => void
+  // Entradas de los .bib del proyecto, sugeridas dentro de \cite{...}
+  citations?: BibEntry[]
+  // Rutas de los archivos del proyecto, sugeridas en \bibliography{...}, \includegraphics{...}, \input{...}
+  projectFiles?: string[]
+  // Contenido que reemplaza al editor de código bajo las pestañas (ej. visor de imágenes)
+  customBody?: React.ReactNode
+  // Barra de formato mostrada debajo de las pestañas, como en Overleaf
+  toolbar?: React.ReactNode
 }
 
 // Resaltador de sintaxis LaTeX básico y rápido para el backdrop
@@ -82,6 +96,14 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
   targetLine = null,
   onLineFocused,
   readOnly = false,
+  documentId,
+  openTabs = [],
+  onOpenTab,
+  onCloseTab,
+  citations = [],
+  projectFiles = [],
+  customBody,
+  toolbar,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
@@ -169,7 +191,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
 
   // Comprobar y actualizar sugerencias según lo que escribe el usuario
   const checkSuggestions = (text: string, caret: number) => {
-    const match = getSuggestionsForContext(text, caret)
+    const match = getSuggestionsForContext(text, caret, citations, projectFiles)
     if (match && match.items.length > 0) {
       setActiveMatch(match)
       setSelectedIndex(0)
@@ -201,6 +223,9 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
     setTimeout(() => {
       textarea.focus()
       textarea.setSelectionRange(newCaret, newCaret)
+      // Al insertar \cite{} o \bibliography{} el cursor queda dentro de las llaves: mostrar de inmediato
+      // las referencias o los archivos .bib del proyecto
+      if (item.type !== 'citation' && item.type !== 'file') checkSuggestions(newValue, newCaret)
     }, 0)
   }
 
@@ -311,7 +336,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
       const textarea = textareaRef.current
       if (textarea) {
         const caret = textarea.selectionStart
-        const match = getSuggestionsForContext(value, caret)
+        const match = getSuggestionsForContext(value, caret, citations, projectFiles)
         if (match && match.items.length > 0) {
           setActiveMatch(match)
           setSelectedIndex(0)
@@ -498,10 +523,14 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
                   ? 'badge-snip'
                   : item.type === 'environment'
                   ? 'badge-env'
+                  : item.type === 'citation'
+                  ? 'badge-cite'
+                  : item.type === 'file'
+                  ? 'badge-file'
                   : 'badge-cmd'
 
               const badgeText =
-                item.type === 'snippet' ? 'snip' : item.type === 'environment' ? 'env' : 'cmd'
+                item.type === 'snippet' ? 'snip' : item.type === 'environment' ? 'env' : item.type === 'citation' ? 'bib' : item.type === 'file' ? 'file' : 'cmd'
 
               return (
                 <li
@@ -514,7 +543,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
                     <span className={`sug-badge ${badgeClass}`}>{badgeText}</span>
                     <span className="sug-label">{item.label}</span>
                   </div>
-                  <span className="sug-desc" title={item.description}>
+                  <span className="sug-desc" title={item.detail ? `${item.description}\n${item.detail}` : item.description}>
                     {item.description}
                   </span>
                 </li>
@@ -529,6 +558,23 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
         </div>
       )}
 
+      {openTabs.length > 0 && (
+        <div className="editor-tabs editor-tabs-in-panel" role="tablist" aria-label="Archivos abiertos">
+          {openTabs.map((tab) => (
+            <div key={tab.id} className={`editor-file-tab-path ${tab.id === documentId ? 'active' : ''}`}>
+              <button type="button" onClick={() => onOpenTab?.(tab.id)} role="tab" aria-selected={tab.id === documentId}>
+                <span className="editor-tab-file-icon">{isImageFileName(tab.name) ? '▣' : '▧'}</span>{tab.name}
+              </button>
+              <button type="button" className="editor-tab-close" onClick={() => onCloseTab?.(tab.id)} aria-label={`Cerrar ${tab.name}`}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Barra de formato (solo para archivos de texto editables) */}
+      {!customBody && toolbar}
+
+      {customBody ? <div className="latex-editor-body">{customBody}</div> : (
       <div className="latex-editor-body">
         {/* Gutter de números de línea e indicadores de error */}
         <div className="editor-gutter" ref={gutterRef}>
@@ -588,6 +634,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
           />
         </div>
       </div>
+      )}
     </div>
   )
 }

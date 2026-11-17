@@ -27,6 +27,9 @@ export interface LatexDocument {
   projectName?: string
   name: string
   content: string
+  // false para binarios (imágenes, PDFs...), que no se editan como texto
+  isText?: boolean
+  fileType?: string | null
   sizeBytes?: number
   role?: string
   description?: string
@@ -34,6 +37,18 @@ export interface LatexDocument {
   updatedAt?: string
   autoSave?: DocumentAutoSave | null
   lastCompilation?: LastCompilation | null
+}
+
+export interface ProjectNode {
+  id: string
+  proyecto_id: string
+  padre_id: string | null
+  nombre: string
+  tipo_nodo: 'archivo' | 'carpeta'
+  tipo_archivo?: string | null
+  contenido_actual?: string | null
+  tamano_bytes?: number | null
+  storage_path?: string | null
 }
 
 export interface DocumentListItem {
@@ -91,6 +106,8 @@ export interface CompileDocumentRequest {
 export interface CompileDocumentResponse {
   success: boolean
   documentId: string
+  // Archivo .tex que realmente se compiló (puede ser distinto del archivo abierto, ej. al compilar desde un capítulo o un .bib)
+  mainDocument?: { id: string; name: string; path: string }
   compilationId: string
   pdfUrl: string | null
   previousPdfUrl?: string | null

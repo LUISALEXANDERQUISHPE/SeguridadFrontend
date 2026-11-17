@@ -2,7 +2,9 @@
    Panel de proyectos (HU-17) — estructura inspirada en Overleaf
    ========================================================== */
 
-.pm-dashboard {
+/* Las variables también se definen en el diálogo, porque los modales se reutilizan en el editor */
+.pm-dashboard,
+.pm-dialog {
   --pm-bg: #1b222c;
   --pm-surface: #262f3c;
   --pm-surface-hover: #2f3a4a;
