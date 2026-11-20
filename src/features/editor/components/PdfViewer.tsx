@@ -1,22 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { CompileStatus } from '../../../types/document'
 import { downloadPdfFile } from '../../../services/documentService'
 import Icon from '../../../components/common/Icon'
 import { usePdfDocument } from '../pdf/usePdfDocument'
+import { useElementSize, useFirstPageSize } from '../pdf/usePdfLayout'
+import { usePdfSearch } from '../pdf/usePdfSearch'
+import { useFindShortcut, useWheelZoom } from '../pdf/usePdfViewerInput'
+import { resolveScale, zoomIn, zoomOut, type ZoomMode } from '../pdf/pdfZoom'
 import PdfPage from '../pdf/PdfPage'
-import type { PDFDocumentProxy } from '../pdf/pdfjs'
-
-const ZOOM_STEP = 1.2
-const MIN_SCALE = 0.4
-const MAX_SCALE = 4
-const PAGE_GAP_PX = 32
-
-type ZoomMode = 'fit-width' | number
-
-interface PageSize {
-  width: number
-  height: number
-}
+import PdfSearchBar from '../pdf/PdfSearchBar'
+import PdfPageNavigator from '../pdf/PdfPageNavigator'
+import PdfZoomControl from '../pdf/PdfZoomControl'
 
 interface PdfViewerProps {
   /** Número de errores de la última compilación (insignia del botón de registro). */
@@ -30,47 +24,6 @@ interface PdfViewerProps {
   compileTimestamp: number
   isCompiling?: boolean
   onCompileRequest?: () => void
-}
-
-/** Ancho disponible del contenedor de páginas, actualizado al redimensionar los paneles. */
-function useElementWidth(ref: RefObject<HTMLElement | null>): number {
-  const [width, setWidth] = useState(0)
-
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return undefined
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref])
-
-  return width
-}
-
-/** Tamaño (a escala 1) de la primera página, usado para calcular el zoom "ajustar al ancho". */
-function useFirstPageSize(pdf: PDFDocumentProxy | null): PageSize | null {
-  const [size, setSize] = useState<{ pdf: PDFDocumentProxy; value: PageSize } | null>(null)
-
-  useEffect(() => {
-    if (!pdf) return undefined
-    let isCurrent = true
-    pdf
-      .getPage(1)
-      .then((page) => {
-        const viewport = page.getViewport({ scale: 1 })
-        if (isCurrent) setSize({ pdf, value: { width: viewport.width, height: viewport.height } })
-      })
-      .catch((err: unknown) => console.warn('[PDF] No se pudo leer la primera página:', err))
-    return () => {
-      isCurrent = false
-    }
-  }, [pdf])
-
-  return size && size.pdf === pdf ? size.value : null
-}
-
-function clampScale(scale: number): number {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale))
 }
 
 interface StatusScreenProps {
@@ -91,9 +44,17 @@ function StatusScreen({ icon, title, description, action }: Readonly<StatusScree
   )
 }
 
+/** Página que ocupa el tercio superior de la zona visible (la que el usuario está leyendo). */
+function findVisiblePage(container: HTMLElement): number {
+  const probe = container.scrollTop + container.clientHeight / 3
+  const pages = Array.from(container.querySelectorAll<HTMLElement>('.pdfjs-page'))
+  const current = pages.findLast((page) => page.offsetTop <= probe)
+  return Number(current?.dataset.pageNumber ?? 1)
+}
+
 /**
- * Visor del PDF compilado (pdf.js), con la barra de Overleaf:
- * Recompilar, registro y descarga a la izquierda; páginas y zoom a la derecha.
+ * Visor del PDF compilado (HU-21) con pdf.js, al estilo de Overleaf:
+ * recompilar, registro y descarga; búsqueda de texto; navegación por páginas y zoom.
  */
 export function PdfViewer({
   errorCount = 0,
@@ -108,40 +69,65 @@ export function PdfViewer({
   onCompileRequest,
 }: Readonly<PdfViewerProps>) {
   const { pdf, loading } = usePdfDocument({ documentId, pdfUrl, previousPdfUrl, compileStatus, compileTimestamp })
+  const viewerRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const containerWidth = useElementWidth(scrollRef)
+  const containerSize = useElementSize(scrollRef)
   const pageSize = useFirstPageSize(pdf)
+  const search = usePdfSearch(pdf)
+
   const [zoom, setZoom] = useState<ZoomMode>('fit-width')
   const [currentPage, setCurrentPage] = useState(1)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
 
   const numPages = pdf?.numPages ?? 0
-  const fitScale = pageSize && containerWidth > 0 ? (containerWidth - PAGE_GAP_PX) / pageSize.width : 1
-  const scale = clampScale(zoom === 'fit-width' ? fitScale : zoom)
+  const hasPages = Boolean(pdf && pageSize)
+  const scale = resolveScale(zoom, pageSize, containerSize)
   const visiblePage = Math.min(Math.max(currentPage, 1), Math.max(numPages, 1))
 
-  const handleScroll = () => {
-    const container = scrollRef.current
-    if (!container) return
-    const probe = container.scrollTop + container.clientHeight / 3
-    const pages = Array.from(container.querySelectorAll<HTMLElement>('.pdfjs-page'))
-    const current = pages.findLast((page) => page.offsetTop <= probe)
-    setCurrentPage(Number(current?.dataset.pageNumber ?? 1))
-  }
-
-  const goToPage = (pageNumber: number) => {
+  const goToPage = useCallback((pageNumber: number, behavior: ScrollBehavior = 'smooth') => {
     const target = scrollRef.current?.querySelector<HTMLElement>(`[data-page-number="${pageNumber}"]`)
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    target?.scrollIntoView({ behavior, block: 'start' })
+  }, [])
+
+  // Al cambiar de coincidencia, llevar su página a la vista (la página centra el resaltado al dibujarse)
+  const activeMatchPage = search.activeMatch?.pageNumber
+  useEffect(() => {
+    if (activeMatchPage) goToPage(activeMatchPage, 'auto')
+  }, [search.activeMatch?.id, activeMatchPage, goToPage])
+
+  const { open: openSearchBar } = search
+  const openSearch = useCallback(() => {
+    if (hasPages) openSearchBar()
+  }, [hasPages, openSearchBar])
+
+  useFindShortcut(viewerRef, openSearch)
+  useWheelZoom(scrollRef, (direction) => setZoom(direction === 'in' ? zoomIn(scale) : zoomOut(scale)))
+
+  const handleScroll = () => {
+    if (scrollRef.current) setCurrentPage(findVisiblePage(scrollRef.current))
   }
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!documentId) return
-    void downloadPdfFile(documentId, `${documentName.replace(/\.tex$/i, '')}.pdf`)
+    setDownloadError(null)
+    try {
+      await downloadPdfFile(documentId, `${documentName.replace(/\.tex$/i, '')}.pdf`)
+    } catch (err: unknown) {
+      setDownloadError(err instanceof Error ? err.message : 'No fue posible descargar el PDF')
+    }
   }
 
   const renderContent = () => {
     if (pdf && pageSize) {
       return Array.from({ length: numPages }, (_, index) => (
-        <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} scale={scale} baseSize={pageSize} />
+        <PdfPage
+          key={index + 1}
+          pdf={pdf}
+          pageNumber={index + 1}
+          scale={scale}
+          baseSize={pageSize}
+          highlights={search.highlightsByPage.get(index + 1)}
+        />
       ))
     }
     if (isCompiling || loading) {
@@ -177,10 +163,8 @@ export function PdfViewer({
     )
   }
 
-  const hasPages = Boolean(pdf && pageSize)
-
   return (
-    <div className="pdf-viewer-container">
+    <div className="pdf-viewer-container" ref={viewerRef}>
       <div className="pdf-toolbar">
         <div className="pdf-toolbar-group">
           {onCompileRequest && (
@@ -210,74 +194,56 @@ export function PdfViewer({
           <button
             type="button"
             className="pdf-logs-btn"
-            onClick={handleDownload}
+            onClick={() => void handleDownload()}
             disabled={!hasPages}
             title="Descargar PDF"
             aria-label="Descargar PDF"
           >
             <Icon name="download" />
           </button>
+          <button
+            type="button"
+            className={`pdf-logs-btn ${search.isOpen ? 'is-active' : ''}`}
+            onClick={search.isOpen ? search.close : openSearch}
+            disabled={!hasPages}
+            aria-pressed={search.isOpen}
+            title="Buscar en el PDF (Ctrl+F)"
+            aria-label="Buscar en el PDF"
+          >
+            <Icon name="search" />
+          </button>
         </div>
 
         {hasPages && (
           <div className="pdf-toolbar-group pdf-nav-group">
-            <button
-              type="button"
-              className="pdf-logs-btn"
-              onClick={() => goToPage(visiblePage - 1)}
-              disabled={visiblePage <= 1}
-              aria-label="Página anterior"
-              title="Página anterior"
-            >
-              <Icon name="arrowUp" />
-            </button>
-            <span className="pdf-page-indicator">
-              {visiblePage} / {numPages}
-            </span>
-            <button
-              type="button"
-              className="pdf-logs-btn"
-              onClick={() => goToPage(visiblePage + 1)}
-              disabled={visiblePage >= numPages}
-              aria-label="Página siguiente"
-              title="Página siguiente"
-            >
-              <Icon name="arrowDown" />
-            </button>
-
+            <PdfPageNavigator currentPage={visiblePage} numPages={numPages} onGoToPage={goToPage} />
             <span className="pdf-toolbar-separator" aria-hidden="true" />
-
-            <button
-              type="button"
-              className="pdf-logs-btn"
-              onClick={() => setZoom(clampScale(scale / ZOOM_STEP))}
-              disabled={scale <= MIN_SCALE}
-              aria-label="Reducir zoom"
-              title="Reducir zoom"
-            >
-              −
-            </button>
-            <button
-              type="button"
-              className="pdf-zoom-label"
-              onClick={() => setZoom('fit-width')}
-              title="Ajustar al ancho"
-            >
-              {Math.round(scale * 100)}%
-            </button>
-            <button
-              type="button"
-              className="pdf-logs-btn"
-              onClick={() => setZoom(clampScale(scale * ZOOM_STEP))}
-              disabled={scale >= MAX_SCALE}
-              aria-label="Aumentar zoom"
-              title="Aumentar zoom"
-            >
-              +
-            </button>
+            <PdfZoomControl mode={zoom} scale={scale} onChange={setZoom} />
           </div>
         )}
       </div>
+
+      {search.isOpen && hasPages && (
+        <PdfSearchBar
+          query={search.query}
+          indexing={search.indexing}
+          total={search.matches.length}
+          activeIndex={search.activeIndex}
+          onQueryChange={search.setQuery}
+          onNext={search.next}
+          onPrevious={search.previous}
+          onClose={search.close}
+        />
+      )}
+
+      {downloadError && (
+        <div className="pdf-download-error" role="alert">
+          <span>{downloadError}</span>
+          <button type="button" onClick={() => setDownloadError(null)} aria-label="Cerrar aviso">
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+      )}
 
       {compileStatus === 'failed' && hasPages && (
         <div className="pdf-stale-banner">Mostrando la versión anterior: la última compilación tuvo errores</div>
