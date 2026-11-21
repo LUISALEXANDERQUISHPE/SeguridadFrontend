@@ -10,4 +10,5 @@ export async function openPdf(blob: Blob): Promise<PDFDocumentProxy> {
   return getDocument({ data }).promise
 }
 
+export { TextLayer } from 'pdfjs-dist'
 export type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
