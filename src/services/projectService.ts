@@ -1,5 +1,4 @@
-import { apiRequest } from './api'
-import { getAuthToken } from './documentService'
+import { authorizedRequest as requestWithAuth } from './api'
 import type {
   CreateProjectRequest,
   GetProjectsResponse,
@@ -7,18 +6,6 @@ import type {
   ProjectResponse,
   UpdateProjectRequest,
 } from '../types/project'
-
-function requestWithAuth<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getAuthToken()
-  if (!token) {
-    return Promise.reject(new Error('Sesión expirada o no autenticada. Por favor, inicia sesión de nuevo.'))
-  }
-
-  return apiRequest<T>(path, {
-    ...options,
-    headers: { Authorization: `Bearer ${token}`, ...options.headers },
-  })
-}
 
 /**
  * Obtiene los proyectos del usuario (activos o archivados)

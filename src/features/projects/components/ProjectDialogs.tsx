@@ -33,6 +33,7 @@ export function ProjectDialogs({
       return (
         <ProjectFormModal
           title="Nuevo proyecto"
+          icon="plus"
           submitLabel="Crear"
           submittingLabel="Creando..."
           info="Se inicializará con la plantilla estándar de LaTeX y se abrirá en el editor."
@@ -44,6 +45,7 @@ export function ProjectDialogs({
       return (
         <ProjectFormModal
           title="Renombrar proyecto"
+          icon="edit"
           submitLabel="Guardar cambios"
           submittingLabel="Guardando..."
           initialName={modal.project.name}
@@ -56,6 +58,7 @@ export function ProjectDialogs({
       return (
         <ProjectFormModal
           title="Duplicar proyecto"
+          icon="copy"
           submitLabel="Duplicar"
           submittingLabel="Duplicando..."
           initialName={`${modal.project.name} (copia)`.slice(0, PROJECT_LIMITS.MAX_NAME_LENGTH)}
@@ -69,6 +72,7 @@ export function ProjectDialogs({
       return (
         <ConfirmModal
           title="Archivar proyecto"
+          icon="archive"
           message={`Vas a archivar ${describeTarget(modal.projects)}. Dejará de mostrarse en el listado principal y podrás restaurarlo desde "Archivados".`}
           confirmLabel="Archivar"
           confirmingLabel="Archivando..."

@@ -15,6 +15,7 @@ export interface IdeMenuActions {
   onToggleSidePanel: () => void
   onToggleConsole: () => void
   onLayoutChange: (layout: EditorLayout) => void
+  onToggleHistory: () => void
 }
 
 interface IdeMenuBarProps {
@@ -24,6 +25,9 @@ interface IdeMenuBarProps {
   layout: EditorLayout
   isSidePanelOpen: boolean
   isConsoleOpen: boolean
+  isHistoryOpen: boolean
+  /** false para archivos binarios (no tienen historial). */
+  canUseHistory: boolean
   actions: IdeMenuActions
 }
 
@@ -46,6 +50,8 @@ export function IdeMenuBar({
   layout,
   isSidePanelOpen,
   isConsoleOpen,
+  isHistoryOpen,
+  canUseHistory,
   actions,
 }: Readonly<IdeMenuBarProps>) {
   const fileItems: DropdownMenuItem[] = [
@@ -70,6 +76,13 @@ export function IdeMenuBar({
   const viewItems: DropdownMenuItem[] = [
     { id: 'files', label: 'Panel de archivos', checked: isSidePanelOpen, onSelect: actions.onToggleSidePanel },
     { id: 'logs', label: 'Registro de compilación', checked: isConsoleOpen, onSelect: actions.onToggleConsole },
+    {
+      id: 'history',
+      label: 'Historial de versiones',
+      checked: isHistoryOpen,
+      disabled: !canUseHistory,
+      onSelect: actions.onToggleHistory,
+    },
   ]
 
   const helpItems: DropdownMenuItem[] = HELP_LINKS.map((link) => ({
@@ -113,6 +126,16 @@ export function IdeMenuBar({
 
       <div className="ide-menubar-right">
         <SaveStatusBadge status={saveStatus} lastSavedAt={lastSavedAt} />
+        <button
+          type="button"
+          className={`ide-menu-trigger ide-menu-trigger-strong ${isHistoryOpen ? 'is-open' : ''}`}
+          onClick={actions.onToggleHistory}
+          disabled={!canUseHistory}
+          aria-pressed={isHistoryOpen}
+          title={canUseHistory ? 'Historial de versiones' : 'Los archivos binarios no tienen historial'}
+        >
+          <Icon name="history" /> Historial
+        </button>
         <DropdownMenu
           align="right"
           triggerClassName="ide-menu-trigger ide-menu-trigger-strong"

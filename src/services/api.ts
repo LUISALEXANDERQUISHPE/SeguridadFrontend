@@ -1,3 +1,5 @@
+import { getAuthToken } from './documentService'
+
 const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim().replace(/\/$/, '')
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -16,6 +18,21 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   }
 
   return data
+}
+
+/**
+ * Petición a la API con el token de la sesión. Si no hay sesión, falla sin llamar al servidor.
+ */
+export function authorizedRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getAuthToken()
+  if (!token) {
+    return Promise.reject(new Error('Sesión expirada o no autenticada. Por favor, inicia sesión de nuevo.'))
+  }
+
+  return apiRequest<T>(path, {
+    ...options,
+    headers: { Authorization: `Bearer ${token}`, ...options.headers },
+  })
 }
 
 export { API_URL }

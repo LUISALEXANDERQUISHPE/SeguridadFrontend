@@ -23,10 +23,14 @@ import type { ProjectNode } from '../../types/document'
 import { parseBibEntries } from '../../utils/bibtex'
 import IdeMenuBar, { type IdeMenuActions } from './components/IdeMenuBar'
 import IdeRail from './components/IdeRail'
+import HistoryPanel from './history/HistoryPanel'
 import FormattingToolbar from './components/FormattingToolbar'
 import type { FormattingAction } from './utils/latexFormatting'
 import type { EditorLayout } from './types'
 import './editor-ide.css'
+
+// Roles que pueden guardar y restaurar versiones (el backend también lo valida)
+const EDIT_ROLES: ReadonlySet<string> = new Set(['propietario', 'editor'])
 
 // El PDF se genera aunque la bibliografía falle (citas como [?]); en ese caso se abre la consola con la explicación
 function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
@@ -60,6 +64,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   // Diseño del IDE (paneles visibles)
   const [layout, setLayout] = useState<EditorLayout>('split')
   const [isSidePanelOpen, setIsSidePanelOpen] = useState<boolean>(true)
+  // Historial de versiones del archivo abierto (HU-23)
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false)
   const editorRef = useRef<LatexEditorHandle | null>(null)
 
   // Estado del Documento
@@ -190,6 +196,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         setSaveStatus('error')
       }
     }, 2000) // 2 segundos tras dejar de escribir
+  }, [])
+
+  // Envía de inmediato el autoguardado pendiente, para que el historial trabaje con lo último escrito
+  const flushPendingAutoSave = useCallback(async () => {
+    if (!autoSaveTimerRef.current || !documentId) return
+    clearTimeout(autoSaveTimerRef.current)
+    autoSaveTimerRef.current = null
+    setSaveStatus('saving')
+    const res = await saveDocument(documentId, contentRef.current, true)
+    setSaveStatus('saved')
+    setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
+  }, [documentId])
+
+  // Muestra en el editor el contenido de una versión restaurada (ya guardado en el servidor)
+  const handleVersionRestored = useCallback((restoredContent: string) => {
+    setContent(restoredContent)
+    setSaveStatus('saved')
+    setLastSavedAt(new Date().toLocaleTimeString())
   }, [])
 
   const handleContentChange = (newContent: string) => {
@@ -478,9 +502,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const toggleConsole = () => setIsConsoleOpen((prev) => !prev)
   const toggleSidePanel = () => setIsSidePanelOpen((prev) => !prev)
   const isBinaryFile = currentDocument?.isText === false
+  // Solo los archivos de texto tienen historial de versiones
+  const canUseHistory = Boolean(currentDocument?.id) && !isBinaryFile
+  const canEditDocument = EDIT_ROLES.has(currentDocument?.role ?? '')
+  const showHistory = isHistoryOpen && canUseHistory && currentDocument !== null
 
   // Las acciones del editor de código requieren que el panel de código esté visible
   const withEditorVisible = (action: (editor: LatexEditorHandle) => void) => {
+    setIsHistoryOpen(false)
     if (layout === 'pdf') setLayout('split')
     requestAnimationFrame(() => {
       if (editorRef.current) action(editorRef.current)
@@ -499,7 +528,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     onInsert: handleFormat,
     onToggleSidePanel: toggleSidePanel,
     onToggleConsole: toggleConsole,
-    onLayoutChange: setLayout,
+    onLayoutChange: (nextLayout) => {
+      setIsHistoryOpen(false)
+      setLayout(nextLayout)
+    },
+    onToggleHistory: () => setIsHistoryOpen((open) => !open),
   }
 
   const renderEditorPanel = () => {
@@ -562,6 +595,77 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   // puede "robarle" espacio al otro por el tamaño de su contenido
   const editorFlex = showPdf ? `0 0 ${splitPercent}%` : '1 1 0'
 
+  // Espacio de trabajo: historial de versiones o editor + PDF + consola
+  const renderWorkspace = () => {
+    if (showHistory && currentDocument) {
+      return (
+        <HistoryPanel
+          key={currentDocument.id}
+          documentId={currentDocument.id}
+          fileName={currentDocument.name}
+          canEdit={canEditDocument}
+          onClose={() => setIsHistoryOpen(false)}
+          beforeChange={flushPendingAutoSave}
+          onRestored={handleVersionRestored}
+        />
+      )
+    }
+
+    return (
+      <>
+    <div className="overleaf-split-container" ref={splitContainerRef}>
+      {showEditor && (
+        <section
+          className="overleaf-panel panel-left ide-code-panel"
+          style={{ flex: editorFlex }}
+          aria-label="Código fuente"
+        >
+          {renderEditorPanel()}
+        </section>
+      )}
+
+      {showEditor && showPdf && (
+        <div
+          className={`overleaf-splitter ${isDragging ? 'dragging' : ''}`}
+          onMouseDown={handleMouseDown}
+          title="Arrastra para redimensionar los paneles"
+          aria-hidden="true"
+        >
+          <div className="splitter-handle" />
+        </div>
+      )}
+
+      {showPdf && (
+        <section className="overleaf-panel panel-right ide-pdf-panel" aria-label="Vista previa PDF">
+          <PdfViewer
+            documentId={currentDocument?.id || null}
+            documentName={currentDocument?.name || `${projectName}.tex`}
+            pdfUrl={pdfUrl}
+            previousPdfUrl={previousPdfUrl}
+            compileStatus={compileStatus}
+            compileTimestamp={compileTimestamp}
+            isCompiling={compileStatus === 'compiling'}
+            onCompileRequest={() => void handleCompile()}
+            errorCount={errors.length}
+            onToggleLogs={toggleConsole}
+          />
+        </section>
+      )}
+    </div>
+
+    <CompilationConsole
+      errors={errors}
+      warnings={warnings}
+      log={compilationLog}
+      compilationTime={compilationTime}
+      onErrorClick={(line, file) => void handleErrorClick(line, file)}
+      isOpen={isConsoleOpen}
+      onToggleOpen={toggleConsole}
+    />
+      </>
+    )
+  }
+
   return (
     <div className="ide-root">
       <IdeMenuBar
@@ -571,6 +675,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         layout={layout}
         isSidePanelOpen={isSidePanelOpen}
         isConsoleOpen={isConsoleOpen}
+        isHistoryOpen={showHistory}
+        canUseHistory={canUseHistory}
         actions={menuActions}
       />
 
@@ -608,57 +714,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           />
         )}
 
-        <div className="overleaf-editor-root ide-workspace">
-          <div className="overleaf-split-container" ref={splitContainerRef}>
-            {showEditor && (
-              <section
-                className="overleaf-panel panel-left ide-code-panel"
-                style={{ flex: editorFlex }}
-                aria-label="Código fuente"
-              >
-                {renderEditorPanel()}
-              </section>
-            )}
-
-            {showEditor && showPdf && (
-              <div
-                className={`overleaf-splitter ${isDragging ? 'dragging' : ''}`}
-                onMouseDown={handleMouseDown}
-                title="Arrastra para redimensionar los paneles"
-                aria-hidden="true"
-              >
-                <div className="splitter-handle" />
-              </div>
-            )}
-
-            {showPdf && (
-              <section className="overleaf-panel panel-right ide-pdf-panel" aria-label="Vista previa PDF">
-                <PdfViewer
-                  documentId={currentDocument?.id || null}
-                  documentName={currentDocument?.name || `${projectName}.tex`}
-                  pdfUrl={pdfUrl}
-                  previousPdfUrl={previousPdfUrl}
-                  compileStatus={compileStatus}
-                  compileTimestamp={compileTimestamp}
-                  isCompiling={compileStatus === 'compiling'}
-                  onCompileRequest={() => void handleCompile()}
-                  errorCount={errors.length}
-                  onToggleLogs={toggleConsole}
-                />
-              </section>
-            )}
-          </div>
-
-          <CompilationConsole
-            errors={errors}
-            warnings={warnings}
-            log={compilationLog}
-            compilationTime={compilationTime}
-            onErrorClick={(line, file) => void handleErrorClick(line, file)}
-            isOpen={isConsoleOpen}
-            onToggleOpen={toggleConsole}
-          />
-        </div>
+        <div className="overleaf-editor-root ide-workspace">{renderWorkspace()}</div>
       </div>
     </div>
   )

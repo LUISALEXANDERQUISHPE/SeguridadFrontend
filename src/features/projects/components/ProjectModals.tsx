@@ -1,5 +1,6 @@
 import { useState, type SyntheticEvent } from 'react'
 import Modal from '../../../components/common/Modal'
+import type { IconName } from '../../../components/common/Icon'
 import { PROJECT_LIMITS } from '../types'
 
 function toMessage(error: unknown): string {
@@ -37,6 +38,7 @@ interface ProjectFormModalProps {
   initialDescription?: string
   showDescription?: boolean
   info?: string
+  icon?: IconName
   onClose: () => void
   onSubmit: (name: string, description: string) => Promise<void>
 }
@@ -50,6 +52,7 @@ export function ProjectFormModal({
   initialDescription = '',
   showDescription = true,
   info,
+  icon = 'edit',
   onClose,
   onSubmit,
 }: Readonly<ProjectFormModalProps>) {
@@ -67,7 +70,7 @@ export function ProjectFormModal({
   }
 
   return (
-    <Modal title={title} isBusy={isSubmitting} onClose={onClose}>
+    <Modal title={title} icon={icon} isBusy={isSubmitting} onClose={onClose}>
       <form onSubmit={handleSubmit} className="pm-form" noValidate>
         {error && (
           <p className="pm-alert pm-alert-error" role="alert">
@@ -79,6 +82,7 @@ export function ProjectFormModal({
           <label htmlFor="project-name">Nombre del proyecto</label>
           <input
             id="project-name"
+            data-autofocus
             type="text"
             placeholder="ej. Tesis de grado"
             value={name}
@@ -124,6 +128,8 @@ interface ConfirmModalProps {
   confirmLabel: string
   confirmingLabel: string
   danger?: boolean
+  /** Por defecto: papelera en acciones de peligro. */
+  icon?: IconName
   onClose: () => void
   onConfirm: () => Promise<void>
 }
@@ -135,13 +141,20 @@ export function ConfirmModal({
   confirmLabel,
   confirmingLabel,
   danger = false,
+  icon,
   onClose,
   onConfirm,
 }: Readonly<ConfirmModalProps>) {
   const { isSubmitting, error, run } = useModalSubmit(onClose)
 
   return (
-    <Modal title={title} isBusy={isSubmitting} onClose={onClose}>
+    <Modal
+      title={title}
+      icon={icon ?? (danger ? 'trash' : undefined)}
+      tone={danger ? 'danger' : 'default'}
+      isBusy={isSubmitting}
+      onClose={onClose}
+    >
       <div className="pm-form">
         {error && (
           <p className="pm-alert pm-alert-error" role="alert">
@@ -152,7 +165,13 @@ export function ConfirmModal({
         <p className="pm-confirm-text">{message}</p>
 
         <div className="pm-dialog-actions">
-          <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
+          <button
+            type="button"
+            className="pm-btn pm-btn-ghost"
+            onClick={onClose}
+            disabled={isSubmitting}
+            data-autofocus
+          >
             Cancelar
           </button>
           <button

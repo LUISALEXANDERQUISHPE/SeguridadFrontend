@@ -3,7 +3,8 @@ import Icon from '../../../components/common/Icon'
 import type { Project } from '../../../types/project'
 import type { SortKey, SortState } from '../types'
 import type { UseProjectSelectionResult } from '../hooks/useProjectSelection'
-import { formatFullDate, formatRelativeDate, getOwnerLabel, getRoleLabel, isOwner } from '../utils/projectList'
+import { getOwnerLabel, getRoleLabel, isOwner } from '../utils/projectList'
+import { formatFullDate, formatRelativeDate } from '../../../utils/dateFormat'
 import ProjectRowActions, { type ProjectActionHandlers } from './ProjectRowActions'
 
 interface ColumnDefinition {
