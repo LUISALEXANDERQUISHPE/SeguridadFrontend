@@ -521,36 +521,108 @@
 }
 
 /* ---------- Modales (<dialog>) ---------- */
+/* El reset de Tailwind quita el margin:auto con el que el navegador centra el <dialog>:
+   se restablece aquí y se fija el diálogo al centro de la ventana. */
 .pm-dialog {
-  width: min(480px, calc(100% - 32px));
+  position: fixed;
+  inset: 0;
+  width: min(500px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  margin: auto;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--pm-border);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--pm-surface);
   color: var(--pm-text);
   font-family: var(--pm-font);
-  box-shadow: 0 24px 48px rgb(0 0 0 / 45%);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 4%),
+    0 32px 64px -12px rgb(0 0 0 / 60%);
+}
+
+.pm-dialog:not([open]) {
+  display: none;
+}
+
+.pm-dialog[open] {
+  animation: pm-dialog-in 0.18s ease-out;
 }
 
 .pm-dialog::backdrop {
-  background: rgb(10 14 20 / 65%);
-  backdrop-filter: blur(2px);
+  background: rgb(8 12 18 / 70%);
+  backdrop-filter: blur(4px);
+}
+
+.pm-dialog[open]::backdrop {
+  animation: pm-backdrop-in 0.18s ease-out;
+}
+
+@keyframes pm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pm-backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Mientras hay un modal abierto la página de fondo no se desplaza */
+html:has(.pm-dialog[open]) {
+  overflow: hidden;
 }
 
 .pm-dialog-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 18px 20px 14px;
   border-bottom: 1px solid var(--pm-border);
 }
 
 .pm-dialog-header h2 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
-  font: 600 18px var(--pm-font);
+  overflow-wrap: anywhere;
+  font: 600 18px/1.3 var(--pm-font);
+}
+
+.pm-dialog-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--pm-surface-selected);
+  color: var(--pm-focus);
+}
+
+.pm-dialog.is-danger .pm-dialog-icon {
+  background: var(--pm-danger-bg);
+  color: var(--pm-danger);
 }
 
 .pm-dialog-body {
+  min-height: 0;
+  overflow-y: auto;
   padding: 20px;
 }
 
@@ -594,13 +666,45 @@
 
 .pm-confirm-text {
   margin: 0;
-  line-height: 1.5;
+  color: var(--pm-text);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .pm-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  margin-top: 4px;
+}
+
+.pm-field input:focus,
+.pm-field textarea:focus {
+  border-color: var(--pm-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(108 199 157 / 20%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pm-dialog[open],
+  .pm-dialog[open]::backdrop {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .pm-dialog {
+    width: calc(100% - 24px);
+    border-radius: 14px;
+  }
+
+  .pm-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .pm-dialog-actions .pm-btn {
+    width: 100%;
+  }
 }
 
 /* ---------- Responsivo ---------- */

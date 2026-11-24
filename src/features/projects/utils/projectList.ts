@@ -8,16 +8,6 @@ const ROLE_LABELS: Record<string, string> = {
   invitado: 'Invitado',
 }
 
-const RELATIVE_UNITS: ReadonlyArray<[Intl.RelativeTimeFormatUnit, number]> = [
-  ['year', 365 * 24 * 60 * 60],
-  ['month', 30 * 24 * 60 * 60],
-  ['week', 7 * 24 * 60 * 60],
-  ['day', 24 * 60 * 60],
-  ['hour', 60 * 60],
-  ['minute', 60],
-]
-
-const relativeFormatter = new Intl.RelativeTimeFormat('es', { numeric: 'auto' })
 const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
 
 export function isOwner(project: Project): boolean {
@@ -32,23 +22,6 @@ export function getRoleLabel(role: string): string {
 export function getOwnerLabel(project: Project): string {
   if (isOwner(project)) return 'Tú'
   return project.ownerName || '—'
-}
-
-/** Fecha relativa al estilo "hace 5 meses". */
-export function formatRelativeDate(isoDate: string | null, now: number = Date.now()): string {
-  if (!isoDate) return '—'
-
-  const elapsedSeconds = Math.round((new Date(isoDate).getTime() - now) / 1000)
-  const match = RELATIVE_UNITS.find(([, seconds]) => Math.abs(elapsedSeconds) >= seconds)
-
-  if (!match) return 'hace un momento'
-
-  const [unit, seconds] = match
-  return relativeFormatter.format(Math.round(elapsedSeconds / seconds), unit)
-}
-
-export function formatFullDate(isoDate: string | null): string {
-  return isoDate ? new Date(isoDate).toLocaleString('es') : ''
 }
 
 function matchesFilter(project: Project, filter: ProjectFilter): boolean {
