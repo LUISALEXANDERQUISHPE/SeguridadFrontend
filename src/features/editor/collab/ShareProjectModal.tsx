@@ -1,6 +1,12 @@
-import { useEffect, useState, type SyntheticEvent } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import Modal from '../../../components/common/Modal'
-import { getProjectMembers, shareProject, type ProjectMember } from '../../../services/projectService'
+import {
+  getProjectMembers,
+  shareProject,
+  type ProjectMember,
+  type ShareSuggestion,
+} from '../../../services/projectService'
+import useShareSuggestions from './useShareSuggestions'
 
 interface ShareProjectModalProps {
   projectId: string
@@ -20,6 +26,42 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  // Autocompletado de correos de usuarios registrados
+  const [isListOpen, setIsListOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const listId = useId()
+  const { suggestions, isSearching } = useShareSuggestions(projectId, email, canShare && isListOpen)
+  const showList = isListOpen && suggestions.length > 0
+
+  const chooseSuggestion = (suggestion: ShareSuggestion) => {
+    setEmail(suggestion.email)
+    setIsListOpen(false)
+    setActiveIndex(-1)
+  }
+
+  const handleEmailKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!showList) {
+      if (event.key === 'ArrowDown') setIsListOpen(true)
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setActiveIndex((index) => (index + 1) % suggestions.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveIndex((index) => (index <= 0 ? suggestions.length - 1 : index - 1))
+    } else if (event.key === 'Enter' && activeIndex >= 0) {
+      // Enter elige la sugerencia resaltada en lugar de enviar el formulario
+      event.preventDefault()
+      chooseSuggestion(suggestions[activeIndex])
+    } else if (event.key === 'Escape') {
+      // Cierra solo la lista, no el modal
+      event.preventDefault()
+      event.stopPropagation()
+      setIsListOpen(false)
+    }
+  }
+
   useEffect(() => {
     let mounted = true
     getProjectMembers(projectId)
@@ -36,6 +78,7 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
       setError('Escribe el correo de la persona con la que quieres compartir')
       return
     }
+    setIsListOpen(false)
     setIsSubmitting(true)
     setError(null)
     setNotice(null)
@@ -60,17 +103,53 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
         <form onSubmit={(event) => void handleSubmit(event)} className="pm-form" noValidate>
           <div className="pm-field">
             <label htmlFor="share-email">Correo del colaborador</label>
-            <input
-              id="share-email"
-              data-autofocus
-              type="email"
-              placeholder="colaborador@correo.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              maxLength={254}
-              autoComplete="off"
-              required
-            />
+            <div className="collab-autocomplete">
+              <input
+                id="share-email"
+                data-autofocus
+                type="email"
+                placeholder="Escribe al menos 3 letras del correo"
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value)
+                  setIsListOpen(true)
+                  setActiveIndex(-1)
+                }}
+                onKeyDown={handleEmailKeyDown}
+                onBlur={() => setIsListOpen(false)}
+                maxLength={254}
+                autoComplete="off"
+                required
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showList}
+                aria-controls={listId}
+                aria-activedescendant={showList && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+              />
+              {isSearching && <span className="collab-autocomplete-spinner" aria-hidden="true" />}
+              {showList && (
+                <ul id={listId} className="collab-autocomplete-list" role="listbox" aria-label="Usuarios sugeridos">
+                  {suggestions.map((suggestion, index) => (
+                    <li
+                      key={suggestion.email}
+                      id={`${listId}-${index}`}
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      className={index === activeIndex ? 'is-active' : undefined}
+                      // mousedown en vez de click: se elige antes de que el input pierda el foco
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        chooseSuggestion(suggestion)
+                      }}
+                      onMouseEnter={() => setActiveIndex(index)}
+                    >
+                      <span className="collab-autocomplete-email">{suggestion.email}</span>
+                      {suggestion.name && <span className="collab-autocomplete-name">{suggestion.name}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
           <p className="pm-hint">La persona debe tener una cuenta registrada. Entrará como editor.</p>
           <div className="pm-dialog-actions">

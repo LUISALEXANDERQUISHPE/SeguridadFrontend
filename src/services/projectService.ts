@@ -100,3 +100,22 @@ export async function shareProject(id: string, email: string): Promise<ProjectMe
   return response.member
 }
 
+/** Usuario registrado sugerido al escribir un correo para compartir. */
+export interface ShareSuggestion {
+  name: string | null
+  email: string
+}
+
+/** Mínimo de caracteres para pedir sugerencias (el backend aplica el mismo límite). */
+export const SHARE_SUGGESTION_MIN_LENGTH = 3
+
+/**
+ * Usuarios cuyo correo empieza con el texto escrito y que aún no tienen acceso al proyecto
+ */
+export async function getShareSuggestions(id: string, query: string, signal?: AbortSignal): Promise<ShareSuggestion[]> {
+  const response = await requestWithAuth<{ users: ShareSuggestion[] }>(
+    `/projects/${id}/share-suggestions?q=${encodeURIComponent(query)}`,
+    { signal },
+  )
+  return response.users || []
+}
