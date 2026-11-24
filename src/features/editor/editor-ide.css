@@ -1537,6 +1537,45 @@
   opacity: 0.9;
 }
 
+/* Modal de compartir */
+.collab-share-notice {
+  background: #e6fcf5;
+  color: #087f5b;
+}
+
+.collab-members-title {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+.collab-members-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collab-members-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.collab-member-name {
+  font-weight: 600;
+}
+
+.collab-member-email {
+  color: #6b7686;
+}
+
+.collab-member-role {
+  margin-left: auto;
+  color: #6b7686;
+  text-transform: capitalize;
+}
 
 /* En la primera línea no hay espacio arriba: la etiqueta va debajo del cursor */
 .collab-caret-label.is-below {

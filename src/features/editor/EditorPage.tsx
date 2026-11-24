@@ -30,6 +30,7 @@ import type { FormattingAction } from './utils/latexFormatting'
 import type { EditorLayout } from './types'
 import useCollaboration from './collab/useCollaboration'
 import CollaboratorsBar from './collab/CollaboratorsBar'
+import ShareProjectModal from './collab/ShareProjectModal'
 import './editor-ide.css'
 
 // Roles que pueden guardar y restaurar versiones (el backend también lo valida)
@@ -111,6 +112,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [editedContents, setEditedContents] = useState<Record<string, string>>({})
   const contentRef = useRef<string>(content)
   contentRef.current = content
+  const [isShareOpen, setIsShareOpen] = useState<boolean>(false)
 
   // Los .bib editados se recuerdan para sugerir sus referencias en \cite{...}
   const rememberBibContent = (doc: LatexDocument | null, text: string) => {
@@ -750,10 +752,18 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             status={collab.status}
             collaborators={collab.collaborators}
             errorMessage={collab.errorMessage}
+            onShare={loadedProjectId ? () => setIsShareOpen(true) : undefined}
           />
         }
       />
 
+      {isShareOpen && loadedProjectId && (
+        <ShareProjectModal
+          projectId={loadedProjectId}
+          canShare={currentDocument?.role === 'propietario'}
+          onClose={() => setIsShareOpen(false)}
+        />
+      )}
 
       <div className="ide-body">
         <IdeRail
