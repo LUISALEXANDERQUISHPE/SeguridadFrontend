@@ -89,17 +89,6 @@ export async function getProjectMembers(id: string): Promise<ProjectMember[]> {
   return response.members || []
 }
 
-/**
- * Comparte el proyecto con otro usuario registrado (entra como editor)
- */
-export async function shareProject(id: string, email: string): Promise<ProjectMember> {
-  const response = await requestWithAuth<{ member: ProjectMember }>(`/projects/${id}/members`, {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  })
-  return response.member
-}
-
 /** Usuario registrado sugerido al escribir un correo para compartir. */
 export interface ShareSuggestion {
   name: string | null

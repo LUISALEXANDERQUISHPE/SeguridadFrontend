@@ -801,3 +801,79 @@ html:has(.pm-dialog[open]) {
 @keyframes pm-spin {
   to { transform: rotate(-360deg); }
 }
+
+/* ---------- HU-25: modal ancho (compartir) ---------- */
+.pm-dialog.is-wide {
+  width: min(680px, calc(100% - 32px));
+}
+
+/* ---------- HU-25: invitaciones pendientes en el panel ---------- */
+.pm-invitations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--pm-primary);
+  border-radius: var(--pm-radius);
+  background: rgb(19 128 79 / 10%);
+}
+
+.pm-invitations-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pm-invitations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pm-invitation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--pm-surface);
+}
+
+.pm-invitation-text {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pm-invitation-role {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--pm-surface-selected);
+  color: var(--pm-success-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pm-invitation-meta {
+  display: block;
+  color: var(--pm-muted);
+  font-size: 12px;
+}
+
+.pm-invitation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pm-invitation-actions .pm-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+}

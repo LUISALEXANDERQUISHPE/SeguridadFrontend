@@ -12,6 +12,8 @@ interface ModalProps {
   icon?: IconName
   /** "danger" resalta en rojo las acciones destructivas. */
   tone?: ModalTone
+  /** "wide" para contenidos más amplios (ej. el modal de compartir). */
+  size?: 'default' | 'wide'
   /** Mientras es true no se permite cerrar el modal (operación en curso). */
   isBusy?: boolean
   onClose: () => void
@@ -23,7 +25,7 @@ interface ModalProps {
  * atrapa el foco, se cierra con Escape y oscurece el fondo con ::backdrop.
  * Los modales concretos se construyen por composición sobre este (abierto/cerrado).
  */
-export function Modal({ title, icon, tone = 'default', isBusy = false, onClose, children }: Readonly<ModalProps>) {
+export function Modal({ title, icon, tone = 'default', size = 'default', isBusy = false, onClose, children }: Readonly<ModalProps>) {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
 
@@ -46,7 +48,7 @@ export function Modal({ title, icon, tone = 'default', isBusy = false, onClose, 
   return (
     <dialog
       ref={dialogRef}
-      className={`pm-dialog ${tone === 'danger' ? 'is-danger' : ''}`}
+      className={`pm-dialog ${tone === 'danger' ? 'is-danger' : ''} ${size === 'wide' ? 'is-wide' : ''}`}
       aria-labelledby={titleId}
       onCancel={handleCancel}
     >

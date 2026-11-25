@@ -760,6 +760,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       {isShareOpen && loadedProjectId && (
         <ShareProjectModal
           projectId={loadedProjectId}
+          projectName={projectName}
           canShare={currentDocument?.role === 'propietario'}
           onClose={() => setIsShareOpen(false)}
         />

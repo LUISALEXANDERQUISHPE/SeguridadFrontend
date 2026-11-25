@@ -1649,3 +1649,208 @@
   color: #a3afbd;
   font-size: 12px;
 }
+
+/* ---------- HU-25: modal "Compartir" estilo Overleaf ---------- */
+.share-invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.share-invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.share-invite-input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.share-invite-input input,
+.share-role-select {
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--pm-border);
+  border-radius: 6px;
+  background: var(--pm-bg);
+  color: var(--pm-text);
+  font: 14px var(--pm-font);
+}
+
+.share-invite-input input:focus,
+.share-role-select:focus {
+  border-color: var(--pm-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(108 199 157 / 20%);
+}
+
+.share-role-select {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.share-invite-btn {
+  flex: 0 0 auto;
+  height: 42px;
+}
+
+.share-help {
+  margin: 0;
+  color: var(--pm-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.share-access {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--pm-border);
+}
+
+.share-access-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.share-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--pm-text);
+  font-size: 14px;
+}
+
+.share-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.share-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px;
+  border-radius: 6px;
+}
+
+.share-person:hover {
+  background: var(--pm-surface-hover);
+}
+
+.share-avatar {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pm-surface-selected);
+  color: var(--pm-success-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.share-person.is-pending .share-avatar {
+  background: var(--pm-surface-hover);
+  color: var(--pm-muted);
+}
+
+.share-person-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.share-person-name {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.share-person-email {
+  overflow-wrap: anywhere;
+  color: var(--pm-muted);
+  font-size: 12px;
+}
+
+.share-pending-tag {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #4a3a12;
+  color: #f5d77a;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.share-role-label {
+  flex-shrink: 0;
+  color: var(--pm-muted);
+  font-size: 13px;
+}
+
+.share-person-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.share-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pm-focus);
+  font: 600 12px var(--pm-font);
+  cursor: pointer;
+}
+
+.share-link-btn:hover:not(:disabled) {
+  background: var(--pm-surface-hover);
+  text-decoration: underline;
+}
+
+.share-link-btn.is-danger {
+  color: var(--pm-danger);
+}
+
+.share-link-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+@media (max-width: 520px) {
+  .share-person {
+    flex-wrap: wrap;
+  }
+
+  .share-person-actions {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: 44px;
+  }
+}
