@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import DropdownMenu, { type DropdownMenuItem } from '../../../components/common/DropdownMenu'
 import Icon from '../../../components/common/Icon'
 import type { SaveStatus } from '../../../types/document'
@@ -29,6 +30,8 @@ interface IdeMenuBarProps {
   /** false para archivos binarios (no tienen historial). */
   canUseHistory: boolean
   actions: IdeMenuActions
+  /** Presencia de colaboradores y botón Compartir (edición en tiempo real). */
+  collaboration?: ReactNode
 }
 
 const LAYOUT_ORDER: readonly EditorLayout[] = ['split', 'editor', 'pdf']
@@ -53,6 +56,7 @@ export function IdeMenuBar({
   isHistoryOpen,
   canUseHistory,
   actions,
+  collaboration,
 }: Readonly<IdeMenuBarProps>) {
   const fileItems: DropdownMenuItem[] = [
     { id: 'save', label: 'Guardar y compilar', shortcut: 'Ctrl+S', onSelect: actions.onSave },
@@ -125,6 +129,7 @@ export function IdeMenuBar({
       </h1>
 
       <div className="ide-menubar-right">
+        {collaboration}
         <SaveStatusBadge status={saveStatus} lastSavedAt={lastSavedAt} />
         <button
           type="button"

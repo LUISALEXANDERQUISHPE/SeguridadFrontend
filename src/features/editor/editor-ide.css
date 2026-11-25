@@ -1432,3 +1432,220 @@
     box-shadow: 8px 0 24px rgb(0 0 0 / 40%);
   }
 }
+
+/* ============================================================
+   Colaboración en tiempo real
+   ============================================================ */
+
+.collab-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collab-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #f0b429;
+  white-space: nowrap;
+}
+
+.collab-status.is-error {
+  color: #ff8787;
+}
+
+.collab-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: collab-pulse 1.2s ease-in-out infinite;
+}
+
+.collab-status.is-error .collab-status-dot {
+  animation: none;
+}
+
+@keyframes collab-pulse {
+  50% { opacity: 0.3; }
+}
+
+.collab-avatars {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collab-avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -6px;
+  border: 2px solid #1f2328;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: default;
+  user-select: none;
+}
+
+.collab-avatar:first-child {
+  margin-left: 0;
+}
+
+.collab-avatar-more {
+  background: #495057;
+}
+
+/* Capa de cursores remotos: entre el texto resaltado (z-index 1) y el textarea (z-index 2) */
+.collab-cursors-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.collab-selection {
+  position: absolute;
+  height: 22px;
+  opacity: 0.25;
+}
+
+.collab-caret {
+  position: absolute;
+  height: 22px;
+  border-left: 2px solid;
+}
+
+.collab-caret-label {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  padding: 1px 5px;
+  border-radius: 3px 3px 3px 0;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+
+/* Modal de compartir */
+.collab-share-notice {
+  background: #e6fcf5;
+  color: #087f5b;
+}
+
+.collab-members-title {
+  margin: 18px 0 8px;
+  font-size: 14px;
+}
+
+.collab-members-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collab-members-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.collab-member-name {
+  font-weight: 600;
+}
+
+.collab-member-email {
+  color: #6b7686;
+}
+
+.collab-member-role {
+  margin-left: auto;
+  color: #6b7686;
+  text-transform: capitalize;
+}
+
+/* En la primera línea no hay espacio arriba: la etiqueta va debajo del cursor */
+.collab-caret-label.is-below {
+  top: 100%;
+  bottom: auto;
+  border-radius: 0 3px 3px 3px;
+}
+
+/* Autocompletado de correos al compartir */
+.collab-autocomplete {
+  position: relative;
+}
+
+.collab-autocomplete input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.collab-autocomplete-spinner {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 2px solid #a3afbd;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: collab-spin 0.8s linear infinite;
+}
+
+@keyframes collab-spin {
+  to { transform: rotate(360deg); }
+}
+
+.collab-autocomplete-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid #3a4657;
+  border-radius: 8px;
+  background: #262f3c;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  list-style: none;
+}
+
+.collab-autocomplete-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #e7edf3;
+  cursor: pointer;
+}
+
+.collab-autocomplete-list li.is-active {
+  background: #2f3a4a;
+}
+
+.collab-autocomplete-email {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.collab-autocomplete-name {
+  color: #a3afbd;
+  font-size: 12px;
+}

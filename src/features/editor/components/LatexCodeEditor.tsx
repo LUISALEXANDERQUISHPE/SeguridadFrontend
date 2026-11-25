@@ -9,11 +9,15 @@ import {
 import type { BibEntry } from '../../../utils/bibtex'
 import { isImageFileName } from '../../../utils/fileTypes'
 import { applyFormatting, type FormattingAction } from '../utils/latexFormatting'
+import RemoteCursors from '../collab/RemoteCursors'
+import type { Collaborator } from '../collab/useCollaboration'
 
 /** Operaciones que otros componentes (barra de formato, menús) pueden pedirle al editor. */
 export interface LatexEditorHandle {
   format: (action: Pick<FormattingAction, 'before' | 'after' | 'placeholder'>) => void
   toggleFind: () => void
+  /** Textarea del editor (para conservar el cursor local cuando llegan cambios de otros colaboradores). */
+  getTextarea: () => HTMLTextAreaElement | null
 }
 
 interface LatexCodeEditorProps {
@@ -37,6 +41,10 @@ interface LatexCodeEditorProps {
   customBody?: React.ReactNode
   // Barra de formato mostrada debajo de las pestañas, como en Overleaf
   toolbar?: React.ReactNode
+  // Cursores y selecciones de los demás colaboradores (edición en tiempo real)
+  remoteCursors?: Collaborator[]
+  // Notifica la selección local (anchor = donde empezó, head = donde está el cursor)
+  onSelectionChange?: (anchor: number, head: number) => void
 }
 
 // Resaltador de sintaxis LaTeX básico y rápido para el backdrop
@@ -104,6 +112,8 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
   projectFiles = [],
   customBody,
   toolbar,
+  remoteCursors = [],
+  onSelectionChange,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
@@ -137,6 +147,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
         })
       },
       toggleFind: () => setShowFind((prev) => !prev),
+      getTextarea: () => textareaRef.current,
     }),
     [value, onChange, readOnly],
   )
@@ -232,11 +243,21 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
   const [highlightedLine, setHighlightedLine] = useState<number | null>(null)
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editorScrollTop, setEditorScrollTop] = useState<number>(0)
+  const [editorScrollLeft, setEditorScrollLeft] = useState<number>(0)
+
+  // Informa la selección local para mostrarla a los demás colaboradores
+  const reportSelection = (textarea: HTMLTextAreaElement) => {
+    if (!onSelectionChange) return
+    const { selectionStart, selectionEnd, selectionDirection } = textarea
+    if (selectionDirection === 'backward') onSelectionChange(selectionEnd, selectionStart)
+    else onSelectionChange(selectionStart, selectionEnd)
+  }
 
   // Sincronizar scroll entre el textarea, el pre del resaltado y el gutter
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
     const { scrollTop, scrollLeft } = e.currentTarget
     setEditorScrollTop(scrollTop)
+    setEditorScrollLeft(scrollLeft)
     if (preRef.current) {
       preRef.current.scrollTop = scrollTop
       preRef.current.scrollLeft = scrollLeft
@@ -395,10 +416,12 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
     const caret = e.target.selectionStart
     onChange(newValue)
     checkSuggestions(newValue, caret)
+    reportSelection(e.target)
   }
 
   // Al hacer clic o mover el cursor
   const handleSelectOrClick = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    reportSelection(e.currentTarget)
     if (isSuggestOpen) {
       const caret = e.currentTarget.selectionStart
       checkSuggestions(value, caret)
@@ -616,6 +639,15 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
             <code dangerouslySetInnerHTML={{ __html: highlightedCode }} />
           </pre>
 
+          {remoteCursors.length > 0 && (
+            <RemoteCursors
+              text={value}
+              collaborators={remoteCursors}
+              scrollTop={editorScrollTop}
+              scrollLeft={editorScrollLeft}
+            />
+          )}
+
           <textarea
             ref={textareaRef}
             value={value}
@@ -624,6 +656,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
             onKeyDown={handleKeyDown}
             onSelect={handleSelectOrClick}
             onClick={handleSelectOrClick}
+            onKeyUp={(e) => reportSelection(e.currentTarget)}
             readOnly={readOnly}
             spellCheck={false}
             autoCapitalize="off"

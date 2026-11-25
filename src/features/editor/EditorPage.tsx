@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type {
   CompilationError,
   CompileStatus,
@@ -27,6 +28,9 @@ import HistoryPanel from './history/HistoryPanel'
 import FormattingToolbar from './components/FormattingToolbar'
 import type { FormattingAction } from './utils/latexFormatting'
 import type { EditorLayout } from './types'
+import useCollaboration from './collab/useCollaboration'
+import CollaboratorsBar from './collab/CollaboratorsBar'
+import ShareProjectModal from './collab/ShareProjectModal'
 import './editor-ide.css'
 
 // Roles que pueden guardar y restaurar versiones (el backend también lo valida)
@@ -108,6 +112,51 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [editedContents, setEditedContents] = useState<Record<string, string>>({})
   const contentRef = useRef<string>(content)
   contentRef.current = content
+  const [isShareOpen, setIsShareOpen] = useState<boolean>(false)
+
+  // Los .bib editados se recuerdan para sugerir sus referencias en \cite{...}
+  const rememberBibContent = (doc: LatexDocument | null, text: string) => {
+    if (doc?.id && /\.bib$/i.test(doc.name)) {
+      setEditedContents((previous) => ({ ...previous, [doc.id]: text }))
+    }
+  }
+
+  // Edición colaborativa en tiempo real (solo archivos de texto). El servidor fusiona los
+  // cambios de todos los colaboradores y guarda el resultado, por eso no se usa el autoguardado.
+  const collab = useCollaboration({
+    documentId: currentDocument?.id ?? null,
+    enabled: Boolean(currentDocument && currentDocument.id === documentId && currentDocument.isText !== false && !isLoading),
+    onSynced: (serverContent) => {
+      setContent(serverContent)
+      rememberBibContent(currentDocument, serverContent)
+    },
+    onRemoteChange: (nextContent, mapIndex) => {
+      const textarea = editorRef.current?.getTextarea() ?? null
+      const selection = textarea
+        ? {
+            start: textarea.selectionStart,
+            end: textarea.selectionEnd,
+            direction: textarea.selectionDirection,
+            scrollTop: textarea.scrollTop,
+            scrollLeft: textarea.scrollLeft,
+          }
+        : null
+      // Render síncrono: el textarea debe reflejar el texto compartido antes del siguiente evento de teclado
+      flushSync(() => setContent(nextContent))
+      if (textarea && selection) {
+        textarea.setSelectionRange(mapIndex(selection.start), mapIndex(selection.end), selection.direction)
+        textarea.scrollTop = selection.scrollTop
+        textarea.scrollLeft = selection.scrollLeft
+      }
+      rememberBibContent(currentDocument, nextContent)
+      setSaveStatus('unsaved')
+    },
+    onSaved: (savedAt) => {
+      if (!autoSaveTimerRef.current) setSaveStatus('saved')
+      setLastSavedAt(new Date(savedAt).toLocaleTimeString())
+    },
+    onSaveError: () => setSaveStatus('error'),
+  })
 
   // 1. Cargar el documento del proyecto abierto
   useEffect(() => {
@@ -200,6 +249,14 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   // Envía de inmediato el autoguardado pendiente, para que el historial trabaje con lo último escrito
   const flushPendingAutoSave = useCallback(async () => {
+    // En edición colaborativa el servidor guarda con unos segundos de espera: forzar el guardado ahora
+    if (collab.isSynced && documentId) {
+      setSaveStatus('saving')
+      const res = await saveDocument(documentId, contentRef.current, true)
+      setSaveStatus('saved')
+      setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
+      return
+    }
     if (!autoSaveTimerRef.current || !documentId) return
     clearTimeout(autoSaveTimerRef.current)
     autoSaveTimerRef.current = null
@@ -207,22 +264,31 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     const res = await saveDocument(documentId, contentRef.current, true)
     setSaveStatus('saved')
     setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
-  }, [documentId])
+  }, [documentId, collab.isSynced])
 
   // Muestra en el editor el contenido de una versión restaurada (ya guardado en el servidor)
+  const { applyLocalChange, isActive: isCollabActive } = collab
   const handleVersionRestored = useCallback((restoredContent: string) => {
+    // La versión restaurada se comparte con los demás colaboradores
+    if (isCollabActive) applyLocalChange(restoredContent)
     setContent(restoredContent)
     setSaveStatus('saved')
     setLastSavedAt(new Date().toLocaleTimeString())
-  }, [])
+  }, [applyLocalChange, isCollabActive])
 
   const handleContentChange = (newContent: string) => {
     // Los binarios (imágenes, PDFs...) no se editan: guardarlos como texto los corrompería
     if (currentDocument?.isText === false) return
-    setContent(newContent)
-    if (currentDocument?.id && /\.bib$/i.test(currentDocument.name)) {
-      setEditedContents((previous) => ({ ...previous, [currentDocument.id]: newContent }))
+    if (collab.isActive) {
+      // Sin conexión (o sin permisos de edición) el cambio no se acepta para no perderlo al resincronizar
+      if (!collab.applyLocalChange(newContent)) return
+      setContent(newContent)
+      rememberBibContent(currentDocument, newContent)
+      setSaveStatus('unsaved')
+      return
     }
+    setContent(newContent)
+    rememberBibContent(currentDocument, newContent)
     if (!isInitialLoadRef.current && currentDocument?.id) {
       triggerAutoSave(currentDocument.id, newContent)
     } else if (!currentDocument?.id) {
@@ -583,6 +649,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         onLineFocused={handleLineFocused}
         citations={citations}
         projectFiles={projectFiles}
+        readOnly={collab.isActive && (!collab.isSynced || !collab.canEdit)}
+        remoteCursors={collab.collaborators}
+        onSelectionChange={collab.updateCursor}
         toolbar={<FormattingToolbar onFormat={handleFormat} onFind={handleFind} />}
         customBody={preview}
       />
@@ -678,7 +747,23 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         isHistoryOpen={showHistory}
         canUseHistory={canUseHistory}
         actions={menuActions}
+        collaboration={
+          <CollaboratorsBar
+            status={collab.status}
+            collaborators={collab.collaborators}
+            errorMessage={collab.errorMessage}
+            onShare={loadedProjectId ? () => setIsShareOpen(true) : undefined}
+          />
+        }
       />
+
+      {isShareOpen && loadedProjectId && (
+        <ShareProjectModal
+          projectId={loadedProjectId}
+          canShare={currentDocument?.role === 'propietario'}
+          onClose={() => setIsShareOpen(false)}
+        />
+      )}
 
       <div className="ide-body">
         <IdeRail

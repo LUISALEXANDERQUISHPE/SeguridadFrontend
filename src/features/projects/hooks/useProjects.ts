@@ -59,6 +59,10 @@ export interface UseProjectsResult {
   error: string | null
   notice: string | null
   setError: (message: string | null) => void
+  showNotice: (message: string) => void
+  /** Vuelve a pedir la lista al servidor sin vaciar la tabla mientras llega. */
+  refresh: () => void
+  refreshing: boolean
   clearMessages: () => void
   create: (data: CreateProjectRequest) => Promise<Project>
   update: (project: Project, data: UpdateProjectRequest) => Promise<Project>
@@ -80,6 +84,9 @@ export function useProjects(archived: boolean): UseProjectsResult {
   const [loadedArchived, setLoadedArchived] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Cada incremento vuelve a cargar la lista (botón "Actualizar" o aviso en tiempo real)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
   const loading = loadedArchived !== archived
 
@@ -99,13 +106,25 @@ export function useProjects(archived: boolean): UseProjectsResult {
         setError(toMessage(err, 'Error al listar los proyectos'))
       })
       .finally(() => {
-        if (isCurrent) setLoadedArchived(archived)
+        if (!isCurrent) return
+        setLoadedArchived(archived)
+        setRefreshing(false)
       })
 
     return () => {
       isCurrent = false
     }
-  }, [archived])
+  }, [archived, reloadKey])
+
+  const refresh = useCallback(() => {
+    setRefreshing(true)
+    setReloadKey((key) => key + 1)
+  }, [])
+
+  const showNotice = useCallback((message: string) => {
+    setError(null)
+    setNotice(message)
+  }, [])
 
   const clearMessages = useCallback(() => {
     setError(null)
@@ -179,6 +198,9 @@ export function useProjects(archived: boolean): UseProjectsResult {
     error,
     notice,
     setError,
+    showNotice,
+    refresh,
+    refreshing,
     clearMessages,
     create,
     update,

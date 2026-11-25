@@ -4,6 +4,7 @@ import type {
   GetProjectsResponse,
   Project,
   ProjectResponse,
+  ProjectRole,
   UpdateProjectRequest,
 } from '../types/project'
 
@@ -69,4 +70,52 @@ export async function restoreProject(id: string): Promise<Project> {
  */
 export async function deleteProject(id: string): Promise<void> {
   await requestWithAuth<{ message: string }>(`/projects/${id}`, { method: 'DELETE' })
+}
+
+/** Colaborador de un proyecto (el propietario no se incluye). */
+export interface ProjectMember {
+  userId: string
+  name: string | null
+  email: string | null
+  role: ProjectRole
+  joinedAt: string | null
+}
+
+/**
+ * Lista los colaboradores de un proyecto
+ */
+export async function getProjectMembers(id: string): Promise<ProjectMember[]> {
+  const response = await requestWithAuth<{ members: ProjectMember[] }>(`/projects/${id}/members`)
+  return response.members || []
+}
+
+/**
+ * Comparte el proyecto con otro usuario registrado (entra como editor)
+ */
+export async function shareProject(id: string, email: string): Promise<ProjectMember> {
+  const response = await requestWithAuth<{ member: ProjectMember }>(`/projects/${id}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+  return response.member
+}
+
+/** Usuario registrado sugerido al escribir un correo para compartir. */
+export interface ShareSuggestion {
+  name: string | null
+  email: string
+}
+
+/** Mínimo de caracteres para pedir sugerencias (el backend aplica el mismo límite). */
+export const SHARE_SUGGESTION_MIN_LENGTH = 3
+
+/**
+ * Usuarios cuyo correo empieza con el texto escrito y que aún no tienen acceso al proyecto
+ */
+export async function getShareSuggestions(id: string, query: string, signal?: AbortSignal): Promise<ShareSuggestion[]> {
+  const response = await requestWithAuth<{ users: ShareSuggestion[] }>(
+    `/projects/${id}/share-suggestions?q=${encodeURIComponent(query)}`,
+    { signal },
+  )
+  return response.users || []
 }

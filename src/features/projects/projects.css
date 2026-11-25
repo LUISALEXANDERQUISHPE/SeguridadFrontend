@@ -761,3 +761,43 @@ html:has(.pm-dialog[open]) {
     display: none;
   }
 }
+
+/* Botón para volver a cargar la lista (ej. después de que te compartan un proyecto) */
+.pm-panel-header .pm-count {
+  margin-left: auto;
+}
+
+.pm-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--pm-border);
+  border-radius: var(--pm-radius);
+  background: var(--pm-surface);
+  color: var(--pm-text);
+  font: 500 13px var(--pm-font);
+  cursor: pointer;
+}
+
+.pm-refresh-btn:hover:not(:disabled) {
+  background: var(--pm-surface-hover);
+}
+
+.pm-refresh-btn:focus-visible {
+  outline: 2px solid var(--pm-focus);
+  outline-offset: 2px;
+}
+
+.pm-refresh-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.pm-refresh-btn .is-spinning {
+  animation: pm-spin 0.9s linear infinite;
+}
+
+@keyframes pm-spin {
+  to { transform: rotate(-360deg); }
+}

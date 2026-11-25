@@ -4,6 +4,7 @@ import type { Project } from '../../types/project'
 import { downloadPdfFile, downloadSourceFile } from '../../services/documentService'
 import { useProjects } from './hooks/useProjects'
 import { useProjectSelection } from './hooks/useProjectSelection'
+import { useProjectNotifications } from './hooks/useProjectNotifications'
 import { selectVisibleProjects } from './utils/projectList'
 import { PROJECT_LIMITS, type ProjectFilter, type ProjectModalState, type SortKey, type SortState } from './types'
 import DashboardSidebar from './components/DashboardSidebar'
@@ -70,6 +71,13 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
     [store.projects, filter, searchTerm, sort],
   )
   const selection = useProjectSelection(visibleProjects)
+
+  // Cuando alguien comparte un proyecto con este usuario, aparece en la lista sin recargar
+  useProjectNotifications((event) => {
+    store.refresh()
+    const who = event.sharedBy ? `${event.sharedBy} compartió` : 'Se compartió'
+    store.showNotice(`${who} contigo el proyecto "${event.projectName}"`)
+  })
 
   const changeFilter = (next: ProjectFilter) => {
     setFilter(next)
@@ -189,6 +197,16 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
           <header className="pm-panel-header">
             <h1>{SECTION_TITLES[filter]}</h1>
             <span className="pm-count">{visibleProjects.length} proyecto(s)</span>
+            <button
+              type="button"
+              className="pm-refresh-btn"
+              onClick={store.refresh}
+              disabled={store.loading || store.refreshing}
+              title="Actualizar la lista de proyectos"
+            >
+              <Icon name="restore" size={14} className={store.refreshing ? 'is-spinning' : undefined} />
+              {store.refreshing ? 'Actualizando...' : 'Actualizar'}
+            </button>
           </header>
 
           <div className="pm-search">
