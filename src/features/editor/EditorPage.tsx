@@ -31,10 +31,25 @@ import type { EditorLayout } from './types'
 import useCollaboration from './collab/useCollaboration'
 import CollaboratorsBar from './collab/CollaboratorsBar'
 import ShareProjectModal from './collab/ShareProjectModal'
+import Modal from '../../components/common/Modal'
+import useComments from './comments/useComments'
+import CommentsPanel, { type CommentDraft } from './comments/CommentsPanel'
+import { findThreadAt, resolveAnchor, type ResolvedAnchor } from './comments/commentAnchors'
+import type { CommentThread } from '../../services/commentService'
 import './editor-ide.css'
 
 // Roles que pueden guardar y restaurar versiones (el backend también lo valida)
 const EDIT_ROLES: ReadonlySet<string> = new Set(['propietario', 'editor'])
+
+/**
+ * HU-25: ¿Puede el usuario realizar la acción en el proyecto? Usa los permisos que entrega
+ * el backend; si no vienen (respuesta antigua), se deducen del rol (propietario o editor).
+ */
+function hasPermission(document: LatexDocument | null, action: string): boolean {
+  if (!document) return false
+  if (document.permissions) return document.permissions.includes(action)
+  return EDIT_ROLES.has(document.role ?? '')
+}
 
 // El PDF se genera aunque la bibliografía falle (citas como [?]); en ese caso se abre la consola con la explicación
 function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
@@ -113,6 +128,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const contentRef = useRef<string>(content)
   contentRef.current = content
   const [isShareOpen, setIsShareOpen] = useState<boolean>(false)
+  const [accessRevokedMessage, setAccessRevokedMessage] = useState<string | null>(null)
 
   // Los .bib editados se recuerdan para sugerir sus referencias en \cite{...}
   const rememberBibContent = (doc: LatexDocument | null, text: string) => {
@@ -121,9 +137,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     }
   }
 
+  // HU-25: comentarios del archivo de texto abierto (se recargan cuando otro colaborador los cambia)
+  const isTextDocument = Boolean(currentDocument && currentDocument.id === documentId && currentDocument.isText !== false)
+  const comments = useComments(currentDocument?.id ?? null, isTextDocument)
+  const [isCommentsOpen, setIsCommentsOpen] = useState<boolean>(false)
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null)
+  // Un borrador o un hilo activo pertenecen al archivo en que se crearon
+  const [commentsDocumentId, setCommentsDocumentId] = useState<string | null>(documentId)
+  if (commentsDocumentId !== documentId) {
+    setCommentsDocumentId(documentId)
+    setActiveThreadId(null)
+    setCommentDraft(null)
+  }
+
   // Edición colaborativa en tiempo real (solo archivos de texto). El servidor fusiona los
   // cambios de todos los colaboradores y guarda el resultado, por eso no se usa el autoguardado.
   const collab = useCollaboration({
+    onCommentsChanged: () => void comments.reload(),
     documentId: currentDocument?.id ?? null,
     enabled: Boolean(currentDocument && currentDocument.id === documentId && currentDocument.isText !== false && !isLoading),
     onSynced: (serverContent) => {
@@ -156,6 +187,17 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       setLastSavedAt(new Date(savedAt).toLocaleTimeString())
     },
     onSaveError: () => setSaveStatus('error'),
+    // HU-25: el propietario cambió el rol de este usuario: se recargan sus permisos
+    onAccessChanged: () => {
+      if (!documentId) return
+      getDocument(documentId)
+        .then((doc) => setCurrentDocument((previous) =>
+          previous && previous.id === doc.id ? { ...previous, role: doc.role, permissions: doc.permissions } : previous,
+        ))
+        .catch(() => {})
+    },
+    // HU-25: le quitaron el acceso mientras tenía el proyecto abierto
+    onAccessRevoked: (reason) => setAccessRevokedMessage(reason),
   })
 
   // 1. Cargar el documento del proyecto abierto
@@ -279,6 +321,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const handleContentChange = (newContent: string) => {
     // Los binarios (imágenes, PDFs...) no se editan: guardarlos como texto los corrompería
     if (currentDocument?.isText === false) return
+    // HU-25: el lector no modifica el contenido (el backend también lo rechaza)
+    if (!canEditContent) return
     if (collab.isActive) {
       // Sin conexión (o sin permisos de edición) el cambio no se acepta para no perderlo al resincronizar
       if (!collab.applyLocalChange(newContent)) return
@@ -328,9 +372,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       autoSaveTimerRef.current = null
     }
 
-    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false (los binarios no se guardan como texto)
-    if (currentDocument.isText !== false) setSaveStatus('saving')
-    if (currentDocument.isText !== false) try {
+    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false (los binarios no se guardan como texto).
+    // HU-25: el lector no guarda; solo compila lo que ya está guardado
+    const canSave = currentDocument.isText !== false && hasPermission(currentDocument, 'edit_content')
+    if (canSave) setSaveStatus('saving')
+    if (canSave) try {
       const res = await saveDocument(currentDocument.id, currentText, false, 'Guardado manual (Ctrl+S)')
       setSaveStatus('saved')
       setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
@@ -584,7 +630,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const isBinaryFile = currentDocument?.isText === false
   // Solo los archivos de texto tienen historial de versiones
   const canUseHistory = Boolean(currentDocument?.id) && !isBinaryFile
-  const canEditDocument = EDIT_ROLES.has(currentDocument?.role ?? '')
+  // HU-25: permisos del usuario en el proyecto (los define el backend con su matriz)
+  const canEditContent = hasPermission(currentDocument, 'edit_content')
+  const canManageFiles = hasPermission(currentDocument, 'manage_files')
+  const canManageVersions = hasPermission(currentDocument, 'manage_versions')
+  const isReadOnlyUser = Boolean(currentDocument) && !canEditContent
   const showHistory = isHistoryOpen && canUseHistory && currentDocument !== null
 
   // Las acciones del editor de código requieren que el panel de código esté visible
@@ -598,6 +648,75 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   const handleFormat = (action: FormattingAction) => withEditorVisible((editor) => editor.format(action))
   const handleFind = () => withEditorVisible((editor) => editor.toggleFind())
+
+  // ---------- HU-25: comentarios ----------
+  // Permisos que entrega el backend; si no vienen (versión anterior), se deducen del rol
+  const canComment = hasPermission(currentDocument, 'comment')
+  const canResolveComments = hasPermission(currentDocument, 'resolve_comments')
+
+  // Dónde está cada hilo en el texto actual (sigue al texto citado si el documento cambió)
+  const commentAnchors = useMemo(() => {
+    const map = new Map<string, ResolvedAnchor>()
+    comments.threads.forEach((thread) => map.set(thread.id, resolveAnchor(content, thread)))
+    return map
+  }, [comments.threads, content])
+
+  const openThreads = useMemo(() => comments.threads.filter((thread) => !thread.resolved), [comments.threads])
+
+  const commentRanges = useMemo(
+    () =>
+      isCommentsOpen
+        ? openThreads
+            .map((thread) => ({ thread, anchor: commentAnchors.get(thread.id) }))
+            .filter(({ anchor }) => anchor && anchor.status !== 'lost')
+            .map(({ thread, anchor }) => ({ id: thread.id, start: anchor!.start, end: anchor!.end, isActive: thread.id === activeThreadId }))
+        : [],
+    [isCommentsOpen, openThreads, commentAnchors, activeThreadId],
+  )
+
+  const toggleComments = () => {
+    setIsCommentsOpen((open) => !open)
+    setIsHistoryOpen(false)
+    if (layout === 'pdf') setLayout('split')
+  }
+
+  const handleStartComment = () => {
+    const selection = editorRef.current?.getSelection()
+    if (!selection || selection.end <= selection.start || !selection.text.trim()) {
+      window.alert('Primero selecciona en el editor el texto que quieres comentar.')
+      return
+    }
+    setCommentDraft({ start: selection.start, end: selection.end, quote: selection.text })
+  }
+
+  const handleSubmitDraft = async (text: string) => {
+    if (!commentDraft) return false
+    const ok = await comments.create({
+      content: text,
+      selectionStart: commentDraft.start,
+      selectionEnd: commentDraft.end,
+      quotedText: commentDraft.quote.slice(0, 500),
+    })
+    if (ok) setCommentDraft(null)
+    return ok
+  }
+
+  const handleActivateThread = (thread: CommentThread) => {
+    setActiveThreadId(thread.id)
+    const anchor = commentAnchors.get(thread.id)
+    if (anchor && anchor.status !== 'lost') withEditorVisible((editor) => editor.selectRange(anchor.start, anchor.end))
+  }
+
+  // Al mover el cursor dentro de un fragmento comentado, se resalta su hilo en el panel
+  const handleSelectionChange = (anchor: number, head: number) => {
+    collab.updateCursor(anchor, head)
+    if (!isCommentsOpen) return
+    const hit = findThreadAt(
+      openThreads.map((thread) => ({ thread, anchor: commentAnchors.get(thread.id)! })).filter((item) => item.anchor),
+      head,
+    )
+    if (hit && hit.id !== activeThreadId) setActiveThreadId(hit.id)
+  }
 
   const menuActions: IdeMenuActions = {
     onBack,
@@ -663,10 +782,20 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         onLineFocused={handleLineFocused}
         citations={citations}
         projectFiles={projectFiles}
-        readOnly={collab.isActive && (!collab.isSynced || !collab.canEdit)}
+        readOnly={!canEditContent || (collab.isActive && (!collab.isSynced || !collab.canEdit))}
         remoteCursors={collab.collaborators}
-        onSelectionChange={collab.updateCursor}
-        toolbar={<FormattingToolbar onFormat={handleFormat} onFind={handleFind} />}
+        onSelectionChange={handleSelectionChange}
+        commentRanges={commentRanges}
+        toolbar={
+          isReadOnlyUser ? (
+            <div className="readonly-banner" role="status">
+              <span className="readonly-badge">Solo lectura</span>
+              Puedes ver, compilar, descargar y leer los comentarios. Para editar, pide al propietario acceso de editor.
+            </div>
+          ) : (
+            <FormattingToolbar onFormat={handleFormat} onFind={handleFind} />
+          )
+        }
         customBody={preview}
       />
     )
@@ -686,7 +815,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           key={currentDocument.id}
           documentId={currentDocument.id}
           fileName={currentDocument.name}
-          canEdit={canEditDocument}
+          canEdit={canManageVersions}
           onClose={() => setIsHistoryOpen(false)}
           beforeChange={flushPendingAutoSave}
           onRestored={handleVersionRestored}
@@ -703,7 +832,31 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           style={{ flex: editorFlex }}
           aria-label="Código fuente"
         >
-          {renderEditorPanel()}
+          <div className="ide-code-with-comments">
+            <div className="ide-code-main">{renderEditorPanel()}</div>
+            {isCommentsOpen && isTextDocument && (
+              <CommentsPanel
+                threads={comments.threads}
+                anchors={commentAnchors}
+                activeThreadId={activeThreadId}
+                isLoading={comments.isLoading}
+                error={comments.error}
+                canComment={canComment}
+                canResolve={canResolveComments}
+                draft={commentDraft}
+                onStartComment={handleStartComment}
+                onSubmitDraft={handleSubmitDraft}
+                onCancelDraft={() => setCommentDraft(null)}
+                onActivate={handleActivateThread}
+                onReply={comments.reply}
+                onEdit={comments.edit}
+                onSetResolved={comments.setResolved}
+                onDelete={comments.remove}
+                onDismissError={comments.clearError}
+                onClose={() => setIsCommentsOpen(false)}
+              />
+            )}
+          </div>
         </section>
       )}
 
@@ -775,9 +928,27 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       {isShareOpen && loadedProjectId && (
         <ShareProjectModal
           projectId={loadedProjectId}
-          canShare={currentDocument?.role === 'propietario'}
+          projectName={projectName}
+          canShare={hasPermission(currentDocument, 'manage_members')}
           onClose={() => setIsShareOpen(false)}
+          onLeft={() => {
+            setIsShareOpen(false)
+            onBack()
+          }}
         />
+      )}
+
+      {accessRevokedMessage && (
+        <Modal title="Ya no tienes acceso" icon="users" onClose={onBack}>
+          <p className="pm-confirm-text">
+            {accessRevokedMessage}. El propietario retiró tu acceso a «{projectName}». Tus cambios ya guardados se conservan en el proyecto.
+          </p>
+          <div className="pm-dialog-actions">
+            <button type="button" className="pm-btn pm-btn-primary" onClick={onBack} data-autofocus>
+              Volver a mis proyectos
+            </button>
+          </div>
+        </Modal>
       )}
 
       <div className="ide-body">
@@ -788,6 +959,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           onToggleSidePanel={toggleSidePanel}
           onFind={handleFind}
           onToggleConsole={toggleConsole}
+          isCommentsOpen={isCommentsOpen}
+          commentCount={openThreads.length}
+          onToggleComments={isTextDocument ? toggleComments : undefined}
         />
 
         {isSidePanelOpen && loadedProjectId && (
@@ -811,6 +985,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             onInsertText={handleInsertText}
             onNodesLoaded={setProjectNodes}
             refreshKey={documentId || ''}
+            canManageFiles={canManageFiles}
           />
         )}
 

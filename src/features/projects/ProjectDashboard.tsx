@@ -5,6 +5,11 @@ import { downloadPdfFile, downloadSourceFile } from '../../services/documentServ
 import { useProjects } from './hooks/useProjects'
 import { useProjectSelection } from './hooks/useProjectSelection'
 import { useProjectNotifications } from './hooks/useProjectNotifications'
+import { useInvitations } from './hooks/useInvitations'
+import { InvitationLinkDialog, InvitationsInbox } from './components/InvitationsInbox'
+import { getRoleLabel } from './utils/projectList'
+import type { AcceptResult } from '../../services/invitationService'
+import { leaveProject } from '../../services/projectService'
 import { selectVisibleProjects } from './utils/projectList'
 import { PROJECT_LIMITS, type ProjectFilter, type ProjectModalState, type SortKey, type SortState } from './types'
 import DashboardSidebar from './components/DashboardSidebar'
@@ -72,11 +77,44 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
   )
   const selection = useProjectSelection(visibleProjects)
 
-  // Cuando alguien comparte un proyecto con este usuario, aparece en la lista sin recargar
-  useProjectNotifications((event) => {
+  // HU-25: invitaciones recibidas (bandeja y enlace #invitacion=...)
+  const inbox = useInvitations({ onError: store.setError })
+
+  const handleAccepted = (result: AcceptResult | null) => {
+    if (!result) return
     store.refresh()
-    const who = event.sharedBy ? `${event.sharedBy} compartió` : 'Se compartió'
-    store.showNotice(`${who} contigo el proyecto "${event.projectName}"`)
+    store.showNotice(`Ya tienes acceso a "${result.projectName}" como ${getRoleLabel(result.role)}.`)
+  }
+
+  // Avisos en tiempo real: la bandeja y la lista se actualizan sin recargar
+  useProjectNotifications((event) => {
+    switch (event.type) {
+      case 'invitation-received':
+        void inbox.reload()
+        store.showNotice(`${event.invitedBy || 'Alguien'} te invitó al proyecto "${event.projectName}". Revisa tus invitaciones pendientes.`)
+        break
+      case 'invitation-revoked':
+        void inbox.reload()
+        break
+      case 'invitation-accepted':
+        store.refresh()
+        store.showNotice(`${event.acceptedBy || 'Alguien'} aceptó tu invitación a "${event.projectName}".`)
+        break
+      case 'invitation-declined':
+        store.showNotice(`${event.declinedBy || 'Alguien'} rechazó tu invitación${event.projectName ? ` a "${event.projectName}"` : ''}.`)
+        break
+      case 'access-changed':
+        store.refresh()
+        store.showNotice(`Tu permiso en "${event.projectName}" ahora es ${getRoleLabel(event.role)}.`)
+        break
+      case 'access-removed':
+        store.refresh()
+        store.showNotice(`Ya no tienes acceso al proyecto "${event.projectName}".`)
+        break
+      case 'member-left':
+        store.showNotice(`${event.userName || 'Un colaborador'} salió del proyecto "${event.projectName}".`)
+        break
+    }
   })
 
   const changeFilter = (next: ProjectFilter) => {
@@ -148,6 +186,14 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         () => downloadPdfFile(project.documentId ?? '', project.name),
         'Error al descargar el PDF',
       ),
+    onLeave: (project) => {
+      if (!window.confirm(`¿Salir de «${project.name}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`)) return
+      void runWithFeedback(async () => {
+        await leaveProject(project.id)
+        store.refresh()
+        store.showNotice(`Saliste del proyecto "${project.name}".`)
+      }, 'No se pudo salir del proyecto')
+    },
   }
 
   const renderContent = () => {
@@ -229,6 +275,21 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
             <output className="pm-alert pm-alert-success">{store.notice}</output>
           )}
 
+          <InvitationsInbox
+            invitations={inbox.invitations}
+            busyId={inbox.busyId}
+            onAccept={(invitation) => {
+              store.clearMessages()
+              void inbox.accept(invitation).then(handleAccepted)
+            }}
+            onDecline={(invitation) => {
+              store.clearMessages()
+              void inbox.decline(invitation).then((ok) => {
+                if (ok) store.showNotice(`Rechazaste la invitación a "${invitation.projectName ?? 'el proyecto'}".`)
+              })
+            }}
+          />
+
           {selection.selectedProjects.length > 0 && (
             <BulkActionsBar
               selectedProjects={selection.selectedProjects}
@@ -259,6 +320,18 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         onArchive={store.archive}
         onDelete={store.remove}
       />
+
+      {inbox.linkInvitation && (
+        <InvitationLinkDialog
+          invitation={inbox.linkInvitation.invitation}
+          isBusy={inbox.busyId === inbox.linkInvitation.invitation.id}
+          onAccept={() => {
+            store.clearMessages()
+            void inbox.acceptLink().then(handleAccepted)
+          }}
+          onDismiss={inbox.dismissLink}
+        />
+      )}
     </div>
   )
 }

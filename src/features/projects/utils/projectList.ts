@@ -4,6 +4,7 @@ import { OWNER_ROLE, type ProjectFilter, type SortState } from '../types'
 const ROLE_LABELS: Record<string, string> = {
   propietario: 'Propietario',
   editor: 'Editor',
+  lector: 'Lector',
   revisor: 'Revisor',
   invitado: 'Invitado',
 }

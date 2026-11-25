@@ -1,26 +1,10 @@
 import { useMemo } from 'react'
 import type { Collaborator } from './useCollaboration'
 import { toLineColumn } from './textSync'
+import { getCharWidth, LINE_HEIGHT, PADDING_LEFT, PADDING_TOP } from './editorMetrics'
 
-// Métricas del editor (deben coincidir con .editor-textarea en index.css)
-const LINE_HEIGHT = 22
-const PADDING_TOP = 12
-const PADDING_LEFT = 16
-const EDITOR_FONT = "13px Consolas, 'Courier New', monospace"
 // Una selección remota enorme no debe generar miles de rectángulos
 const MAX_SELECTION_LINES = 300
-
-let cachedCharWidth: number | null = null
-
-/** Ancho de un carácter de la fuente monoespaciada del editor. */
-function getCharWidth(): number {
-  if (cachedCharWidth) return cachedCharWidth
-  const context = document.createElement('canvas').getContext('2d')
-  if (!context) return 7.2
-  context.font = EDITOR_FONT
-  cachedCharWidth = context.measureText('M'.repeat(100)).width / 100 || 7.2
-  return cachedCharWidth
-}
 
 interface RemoteCursorsProps {
   text: string
