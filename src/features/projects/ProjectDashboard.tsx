@@ -102,6 +102,17 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
       case 'invitation-declined':
         store.showNotice(`${event.declinedBy || 'Alguien'} rechazó tu invitación${event.projectName ? ` a "${event.projectName}"` : ''}.`)
         break
+      case 'access-changed':
+        store.refresh()
+        store.showNotice(`Tu permiso en "${event.projectName}" ahora es ${getRoleLabel(event.role)}.`)
+        break
+      case 'access-removed':
+        store.refresh()
+        store.showNotice(`Ya no tienes acceso al proyecto "${event.projectName}".`)
+        break
+      case 'member-left':
+        store.showNotice(`${event.userName || 'Un colaborador'} salió del proyecto "${event.projectName}".`)
+        break
     }
   })
 

@@ -1,5 +1,6 @@
 import { authorizedRequest as requestWithAuth } from './api'
 import type {
+  AssignableRole,
   CreateProjectRequest,
   GetProjectsResponse,
   Project,
@@ -87,6 +88,24 @@ export interface ProjectMember {
 export async function getProjectMembers(id: string): Promise<ProjectMember[]> {
   const response = await requestWithAuth<{ members: ProjectMember[] }>(`/projects/${id}/members`)
   return response.members || []
+}
+
+/** HU-25: cambia el rol de un colaborador (solo el propietario). */
+export async function changeMemberRole(id: string, userId: string, role: AssignableRole): Promise<void> {
+  await requestWithAuth(`/projects/${id}/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  })
+}
+
+/** HU-25: quita el acceso a un colaborador (solo el propietario). */
+export async function removeProjectMember(id: string, userId: string): Promise<void> {
+  await requestWithAuth(`/projects/${id}/members/${userId}`, { method: 'DELETE' })
+}
+
+/** HU-25: el usuario actual sale del proyecto (no disponible para el propietario). */
+export async function leaveProject(id: string): Promise<void> {
+  await requestWithAuth(`/projects/${id}/members/me`, { method: 'DELETE' })
 }
 
 /** Usuario registrado sugerido al escribir un correo para compartir. */

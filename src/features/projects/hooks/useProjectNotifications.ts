@@ -8,12 +8,18 @@ export type ProjectNotification =
   | { type: 'invitation-revoked'; invitationId: string; projectId: string }
   | { type: 'invitation-accepted'; invitationId: string; projectId: string; projectName: string; acceptedBy: string | null; role: string }
   | { type: 'invitation-declined'; invitationId: string; projectId: string; projectName: string | null; declinedBy: string | null }
+  | { type: 'access-changed'; projectId: string; projectName: string; role: string }
+  | { type: 'access-removed'; projectId: string; projectName: string }
+  | { type: 'member-left'; projectId: string; projectName: string; userName: string | null }
 
 const NOTIFICATION_TYPES = new Set<string>([
   'invitation-received',
   'invitation-revoked',
   'invitation-accepted',
   'invitation-declined',
+  'access-changed',
+  'access-removed',
+  'member-left',
 ])
 
 const MAX_RECONNECT_DELAY_MS = 30000

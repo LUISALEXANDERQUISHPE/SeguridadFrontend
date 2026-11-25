@@ -32,6 +32,8 @@ export interface LatexDocument {
   fileType?: string | null
   sizeBytes?: number
   role?: string
+  /** HU-25: acciones permitidas al usuario en el proyecto (las define el backend). */
+  permissions?: string[]
   description?: string
   createdAt?: string
   updatedAt?: string

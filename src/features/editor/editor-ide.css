@@ -1854,3 +1854,30 @@
     padding-left: 44px;
   }
 }
+
+/* HU-25: selector de permiso de cada colaborador (Puede editar / Solo lectura / Quitar acceso) */
+.share-member-select {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--pm-border);
+  border-radius: 6px;
+  background: var(--pm-bg);
+  color: var(--pm-text);
+  font: 13px var(--pm-font);
+  cursor: pointer;
+}
+
+.share-member-select:focus {
+  border-color: var(--pm-focus);
+  outline: none;
+}
+
+.share-member-select:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.share-leave-btn {
+  margin-right: auto;
+}

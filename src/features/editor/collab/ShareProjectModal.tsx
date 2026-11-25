@@ -1,7 +1,14 @@
 import { useEffect, useId, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import Modal from '../../../components/common/Modal'
 import Icon from '../../../components/common/Icon'
-import { getProjectMembers, type ProjectMember, type ShareSuggestion } from '../../../services/projectService'
+import {
+  changeMemberRole,
+  getProjectMembers,
+  leaveProject,
+  removeProjectMember,
+  type ProjectMember,
+  type ShareSuggestion,
+} from '../../../services/projectService'
 import {
   buildInvitationLink,
   getProjectInvitations,
@@ -20,7 +27,12 @@ interface ShareProjectModalProps {
   /** Solo el propietario invita y gestiona el acceso; el resto solo ve quién tiene acceso. */
   canShare: boolean
   onClose: () => void
+  /** HU-25: el usuario salió del proyecto (el editor debe cerrarse). */
+  onLeft?: () => void
 }
+
+// Valor especial del selector de cada colaborador para quitarle el acceso
+const REMOVE_ACCESS = '__quitar__'
 
 const ROLE_OPTIONS: Array<{ value: AssignableRole; label: string }> = [
   { value: 'editor', label: 'Puede editar' },
@@ -43,7 +55,7 @@ const formatDate = (iso: string) => new Date(iso).toLocaleDateString('es', { day
  * En "Acceso al proyecto" se ven los colaboradores y las invitaciones pendientes
  * (copiar enlace, reenviar o revocar).
  */
-export function ShareProjectModal({ projectId, projectName, canShare, onClose }: Readonly<ShareProjectModalProps>) {
+export function ShareProjectModal({ projectId, projectName, canShare, onClose, onLeft }: Readonly<ShareProjectModalProps>) {
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([])
   // Enlaces que se pueden copiar en esta sesión (el token solo llega al invitar o reenviar)
@@ -178,6 +190,34 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose }:
       setNotice(`Se revocó la invitación de ${invitation.email}.`)
     })
 
+  // HU-25: cambiar el rol de un colaborador o quitarle el acceso (desde su selector)
+  const handleMemberChange = (member: ProjectMember, value: string) => {
+    const who = member.name || member.email || 'Esa persona'
+    if (value === REMOVE_ACCESS) {
+      if (!window.confirm(`¿Quitar el acceso de ${who} al proyecto? Si lo tiene abierto, se le cerrará.`)) return
+      void runInvitationAction(member.userId, async () => {
+        await removeProjectMember(projectId, member.userId)
+        setMembers((previous) => previous.filter((item) => item.userId !== member.userId))
+        setNotice(`${who} ya no tiene acceso al proyecto.`)
+      })
+      return
+    }
+    const role = value as AssignableRole
+    void runInvitationAction(member.userId, async () => {
+      await changeMemberRole(projectId, member.userId, role)
+      setMembers((previous) => previous.map((item) => (item.userId === member.userId ? { ...item, role } : item)))
+      setNotice(`${who} ahora es ${getRoleLabel(role).toLowerCase()}.`)
+    })
+  }
+
+  const handleLeave = () => {
+    if (!window.confirm(`¿Salir de «${projectName}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`)) return
+    void runInvitationAction('leave', async () => {
+      await leaveProject(projectId)
+      onLeft?.()
+    })
+  }
+
   const handleCopy = async (invitationId: string) => {
     try {
       await navigator.clipboard.writeText(links[invitationId])
@@ -286,7 +326,26 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose }:
                   <span className="share-person-name">{member.name || member.email}</span>
                   {member.name && <span className="share-person-email">{member.email}</span>}
                 </span>
-                <span className="share-role-label">{getRoleLabel(member.role)}</span>
+                {canShare ? (
+                  <select
+                    className="share-member-select"
+                    value={member.role}
+                    onChange={(event) => handleMemberChange(member, event.target.value)}
+                    disabled={busyId === member.userId}
+                    aria-label={`Permiso de ${member.name || member.email}`}
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                    {/* Roles heredados: se muestran tal cual hasta que el propietario los cambie */}
+                    {!ROLE_OPTIONS.some((option) => option.value === member.role) && (
+                      <option value={member.role} disabled>{getRoleLabel(member.role)}</option>
+                    )}
+                    <option value={REMOVE_ACCESS}>Quitar acceso</option>
+                  </select>
+                ) : (
+                  <span className="share-role-label">{getRoleLabel(member.role)}</span>
+                )}
               </li>
             ))}
             {invitations.map((invitation) => (
@@ -320,6 +379,16 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose }:
       </section>
 
       <div className="pm-dialog-actions">
+        {!canShare && onLeft && (
+          <button
+            type="button"
+            className="pm-btn pm-btn-ghost is-danger share-leave-btn"
+            onClick={handleLeave}
+            disabled={busyId === 'leave'}
+          >
+            {busyId === 'leave' ? 'Saliendo...' : 'Salir del proyecto'}
+          </button>
+        )}
         <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
           Cerrar
         </button>

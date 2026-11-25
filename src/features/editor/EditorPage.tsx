@@ -31,6 +31,7 @@ import type { EditorLayout } from './types'
 import useCollaboration from './collab/useCollaboration'
 import CollaboratorsBar from './collab/CollaboratorsBar'
 import ShareProjectModal from './collab/ShareProjectModal'
+import Modal from '../../components/common/Modal'
 import './editor-ide.css'
 
 // Roles que pueden guardar y restaurar versiones (el backend también lo valida)
@@ -113,6 +114,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const contentRef = useRef<string>(content)
   contentRef.current = content
   const [isShareOpen, setIsShareOpen] = useState<boolean>(false)
+  const [accessRevokedMessage, setAccessRevokedMessage] = useState<string | null>(null)
 
   // Los .bib editados se recuerdan para sugerir sus referencias en \cite{...}
   const rememberBibContent = (doc: LatexDocument | null, text: string) => {
@@ -156,6 +158,17 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       setLastSavedAt(new Date(savedAt).toLocaleTimeString())
     },
     onSaveError: () => setSaveStatus('error'),
+    // HU-25: el propietario cambió el rol de este usuario: se recargan sus permisos
+    onAccessChanged: () => {
+      if (!documentId) return
+      getDocument(documentId)
+        .then((doc) => setCurrentDocument((previous) =>
+          previous && previous.id === doc.id ? { ...previous, role: doc.role, permissions: doc.permissions } : previous,
+        ))
+        .catch(() => {})
+    },
+    // HU-25: le quitaron el acceso mientras tenía el proyecto abierto
+    onAccessRevoked: (reason) => setAccessRevokedMessage(reason),
   })
 
   // 1. Cargar el documento del proyecto abierto
@@ -763,7 +776,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           projectName={projectName}
           canShare={currentDocument?.role === 'propietario'}
           onClose={() => setIsShareOpen(false)}
+          onLeft={() => {
+            setIsShareOpen(false)
+            onBack()
+          }}
         />
+      )}
+
+      {accessRevokedMessage && (
+        <Modal title="Ya no tienes acceso" icon="users" onClose={onBack}>
+          <p className="pm-confirm-text">
+            {accessRevokedMessage}. El propietario retiró tu acceso a «{projectName}». Tus cambios ya guardados se conservan en el proyecto.
+          </p>
+          <div className="pm-dialog-actions">
+            <button type="button" className="pm-btn pm-btn-primary" onClick={onBack} data-autofocus>
+              Volver a mis proyectos
+            </button>
+          </div>
+        </Modal>
       )}
 
       <div className="ide-body">
