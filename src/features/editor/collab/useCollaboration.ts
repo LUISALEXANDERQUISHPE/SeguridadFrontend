@@ -51,6 +51,8 @@ type ServerMessage =
   | { type: 'error'; message: string }
   // HU-25: el propietario cambió el rol de este usuario mientras tenía el archivo abierto
   | { type: 'access'; canEdit: boolean }
+  // HU-25: alguien creó, editó, resolvió o borró un comentario de este archivo
+  | { type: 'comments-changed' }
 
 /** HU-25: el servidor cerró la conexión porque el usuario ya no tiene acceso al proyecto. */
 const ACCESS_REVOKED_CODE = 4403
@@ -70,6 +72,8 @@ interface UseCollaborationOptions {
   onAccessChanged?: (canEdit: boolean) => void
   /** HU-25: al usuario le quitaron el acceso al proyecto. */
   onAccessRevoked?: (reason: string) => void
+  /** HU-25: los comentarios del archivo cambiaron (hay que recargarlos). */
+  onCommentsChanged?: () => void
 }
 
 /**
@@ -89,6 +93,7 @@ export function useCollaboration({
   onSaveError,
   onAccessChanged,
   onAccessRevoked,
+  onCommentsChanged,
 }: UseCollaborationOptions) {
   const [status, setStatus] = useState<CollabStatus>('disabled')
   const [canEdit, setCanEdit] = useState(false)
@@ -105,9 +110,9 @@ export function useCollaboration({
   const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Callbacks en refs: así la conexión no se reinicia cuando el componente se vuelve a renderizar
-  const callbacksRef = useRef({ onSynced, onRemoteChange, onSaved, onSaveError, onAccessChanged, onAccessRevoked })
+  const callbacksRef = useRef({ onSynced, onRemoteChange, onSaved, onSaveError, onAccessChanged, onAccessRevoked, onCommentsChanged })
   useLayoutEffect(() => {
-    callbacksRef.current = { onSynced, onRemoteChange, onSaved, onSaveError, onAccessChanged, onAccessRevoked }
+    callbacksRef.current = { onSynced, onRemoteChange, onSaved, onSaveError, onAccessChanged, onAccessRevoked, onCommentsChanged }
   })
 
   /** Recalcula las posiciones absolutas de los cursores remotos en el texto actual. */
@@ -242,6 +247,9 @@ export function useCollaboration({
             if (lostEdit) socket.close(RESYNC_CODE, 'Permisos actualizados')
             break
           }
+          case 'comments-changed':
+            callbacksRef.current.onCommentsChanged?.()
+            break
         }
       }
 

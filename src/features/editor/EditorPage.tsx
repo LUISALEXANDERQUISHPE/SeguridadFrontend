@@ -32,6 +32,10 @@ import useCollaboration from './collab/useCollaboration'
 import CollaboratorsBar from './collab/CollaboratorsBar'
 import ShareProjectModal from './collab/ShareProjectModal'
 import Modal from '../../components/common/Modal'
+import useComments from './comments/useComments'
+import CommentsPanel, { type CommentDraft } from './comments/CommentsPanel'
+import { findThreadAt, resolveAnchor, type ResolvedAnchor } from './comments/commentAnchors'
+import type { CommentThread } from '../../services/commentService'
 import './editor-ide.css'
 
 // Roles que pueden guardar y restaurar versiones (el backend también lo valida)
@@ -123,9 +127,24 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     }
   }
 
+  // HU-25: comentarios del archivo de texto abierto (se recargan cuando otro colaborador los cambia)
+  const isTextDocument = Boolean(currentDocument && currentDocument.id === documentId && currentDocument.isText !== false)
+  const comments = useComments(currentDocument?.id ?? null, isTextDocument)
+  const [isCommentsOpen, setIsCommentsOpen] = useState<boolean>(false)
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null)
+  // Un borrador o un hilo activo pertenecen al archivo en que se crearon
+  const [commentsDocumentId, setCommentsDocumentId] = useState<string | null>(documentId)
+  if (commentsDocumentId !== documentId) {
+    setCommentsDocumentId(documentId)
+    setActiveThreadId(null)
+    setCommentDraft(null)
+  }
+
   // Edición colaborativa en tiempo real (solo archivos de texto). El servidor fusiona los
   // cambios de todos los colaboradores y guarda el resultado, por eso no se usa el autoguardado.
   const collab = useCollaboration({
+    onCommentsChanged: () => void comments.reload(),
     documentId: currentDocument?.id ?? null,
     enabled: Boolean(currentDocument && currentDocument.id === documentId && currentDocument.isText !== false && !isLoading),
     onSynced: (serverContent) => {
@@ -598,6 +617,76 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const handleFormat = (action: FormattingAction) => withEditorVisible((editor) => editor.format(action))
   const handleFind = () => withEditorVisible((editor) => editor.toggleFind())
 
+  // ---------- HU-25: comentarios ----------
+  // Permisos que entrega el backend; si no vienen (versión anterior), se deducen del rol
+  const permissions = currentDocument?.permissions
+  const canComment = permissions ? permissions.includes('comment') : canEditDocument
+  const canResolveComments = permissions ? permissions.includes('resolve_comments') : canEditDocument
+
+  // Dónde está cada hilo en el texto actual (sigue al texto citado si el documento cambió)
+  const commentAnchors = useMemo(() => {
+    const map = new Map<string, ResolvedAnchor>()
+    comments.threads.forEach((thread) => map.set(thread.id, resolveAnchor(content, thread)))
+    return map
+  }, [comments.threads, content])
+
+  const openThreads = useMemo(() => comments.threads.filter((thread) => !thread.resolved), [comments.threads])
+
+  const commentRanges = useMemo(
+    () =>
+      isCommentsOpen
+        ? openThreads
+            .map((thread) => ({ thread, anchor: commentAnchors.get(thread.id) }))
+            .filter(({ anchor }) => anchor && anchor.status !== 'lost')
+            .map(({ thread, anchor }) => ({ id: thread.id, start: anchor!.start, end: anchor!.end, isActive: thread.id === activeThreadId }))
+        : [],
+    [isCommentsOpen, openThreads, commentAnchors, activeThreadId],
+  )
+
+  const toggleComments = () => {
+    setIsCommentsOpen((open) => !open)
+    setIsHistoryOpen(false)
+    if (layout === 'pdf') setLayout('split')
+  }
+
+  const handleStartComment = () => {
+    const selection = editorRef.current?.getSelection()
+    if (!selection || selection.end <= selection.start || !selection.text.trim()) {
+      window.alert('Primero selecciona en el editor el texto que quieres comentar.')
+      return
+    }
+    setCommentDraft({ start: selection.start, end: selection.end, quote: selection.text })
+  }
+
+  const handleSubmitDraft = async (text: string) => {
+    if (!commentDraft) return false
+    const ok = await comments.create({
+      content: text,
+      selectionStart: commentDraft.start,
+      selectionEnd: commentDraft.end,
+      quotedText: commentDraft.quote.slice(0, 500),
+    })
+    if (ok) setCommentDraft(null)
+    return ok
+  }
+
+  const handleActivateThread = (thread: CommentThread) => {
+    setActiveThreadId(thread.id)
+    const anchor = commentAnchors.get(thread.id)
+    if (anchor && anchor.status !== 'lost') withEditorVisible((editor) => editor.selectRange(anchor.start, anchor.end))
+  }
+
+  // Al mover el cursor dentro de un fragmento comentado, se resalta su hilo en el panel
+  const handleSelectionChange = (anchor: number, head: number) => {
+    collab.updateCursor(anchor, head)
+    if (!isCommentsOpen) return
+    const hit = findThreadAt(
+      openThreads.map((thread) => ({ thread, anchor: commentAnchors.get(thread.id)! })).filter((item) => item.anchor),
+      head,
+    )
+    if (hit && hit.id !== activeThreadId) setActiveThreadId(hit.id)
+  }
+
   const menuActions: IdeMenuActions = {
     onBack,
     onSave: () => void handleSaveAndCompile(),
@@ -664,7 +753,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         projectFiles={projectFiles}
         readOnly={collab.isActive && (!collab.isSynced || !collab.canEdit)}
         remoteCursors={collab.collaborators}
-        onSelectionChange={collab.updateCursor}
+        onSelectionChange={handleSelectionChange}
+        commentRanges={commentRanges}
         toolbar={<FormattingToolbar onFormat={handleFormat} onFind={handleFind} />}
         customBody={preview}
       />
@@ -702,7 +792,31 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           style={{ flex: editorFlex }}
           aria-label="Código fuente"
         >
-          {renderEditorPanel()}
+          <div className="ide-code-with-comments">
+            <div className="ide-code-main">{renderEditorPanel()}</div>
+            {isCommentsOpen && isTextDocument && (
+              <CommentsPanel
+                threads={comments.threads}
+                anchors={commentAnchors}
+                activeThreadId={activeThreadId}
+                isLoading={comments.isLoading}
+                error={comments.error}
+                canComment={canComment}
+                canResolve={canResolveComments}
+                draft={commentDraft}
+                onStartComment={handleStartComment}
+                onSubmitDraft={handleSubmitDraft}
+                onCancelDraft={() => setCommentDraft(null)}
+                onActivate={handleActivateThread}
+                onReply={comments.reply}
+                onEdit={comments.edit}
+                onSetResolved={comments.setResolved}
+                onDelete={comments.remove}
+                onDismissError={comments.clearError}
+                onClose={() => setIsCommentsOpen(false)}
+              />
+            )}
+          </div>
         </section>
       )}
 
@@ -804,6 +918,9 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           onToggleSidePanel={toggleSidePanel}
           onFind={handleFind}
           onToggleConsole={toggleConsole}
+          isCommentsOpen={isCommentsOpen}
+          commentCount={openThreads.length}
+          onToggleComments={isTextDocument ? toggleComments : undefined}
         />
 
         {isSidePanelOpen && loadedProjectId && (
