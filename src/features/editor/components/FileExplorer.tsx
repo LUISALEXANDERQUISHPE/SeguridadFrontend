@@ -18,6 +18,8 @@ interface FileExplorerProps {
   onNodesLoaded?: (nodes: ProjectNode[]) => void
   // Al cambiar, se vuelve a cargar el árbol (ej. al cambiar de pestaña, para leer los .bib guardados)
   refreshKey?: string | number
+  // HU-25: false para el lector: sin crear, subir, renombrar, mover ni eliminar (el backend también lo bloquea)
+  canManageFiles?: boolean
 }
 
 const sectionPattern = /^\\(section|subsection|subsubsection)\*?\{([^}]*)\}/
@@ -42,7 +44,7 @@ const Icon: React.FC<{ name: IconName; size?: number }> = ({ name, size = 16 }) 
   return <svg className="file-icon" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
-export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDocumentId, currentContent, outlineVersion, onOpenDocument, onDocumentDeleted, onDocumentRenamed, onNavigateToLine, onInsertText, onNodesLoaded, refreshKey }) => {
+export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDocumentId, currentContent, outlineVersion, onOpenDocument, onDocumentDeleted, onDocumentRenamed, onNavigateToLine, onInsertText, onNodesLoaded, refreshKey, canManageFiles = true }) => {
   const [nodes, setNodes] = useState<ProjectNode[]>([])
   const [collapsed, setCollapsed] = useState(false)
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
@@ -211,6 +213,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
     event.preventDefault()
     event.stopPropagation()
     setDropTargetId(null)
+    if (!canManageFiles) return
     const dragged = nodes.find((node) => node.id === draggedNodeId)
     if (!dragged || dragged.id === target?.id) return
     const parentId = target?.tipo_nodo === 'carpeta' ? target.id : target?.padre_id || null
@@ -233,7 +236,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
     children(parentId).map((node) => node.tipo_nodo === 'carpeta' ? (
       <React.Fragment key={node.id}>
         <div className={`file-tree-row ${openFolders.has(node.id) ? 'open' : ''} ${dropTargetId === node.id ? 'drop-target' : ''}`} style={{ paddingLeft: `${12 + depth * 16}px` }} onDragOver={(event) => { event.preventDefault(); setDropTargetId(node.id) }} onDragLeave={() => setDropTargetId(null)} onDrop={(event) => void handleDrop(event, node)}>
-          <button className="file-tree-item" type="button" draggable onDragStart={() => setDraggedNodeId(node.id)} onDragEnd={() => { setDraggedNodeId(null); setDropTargetId(null) }} onContextMenu={(event) => showContextMenu(event, node)} onClick={() => setOpenFolders((prev) => { const next = new Set(prev); next.has(node.id) ? next.delete(node.id) : next.add(node.id); return next })}>
+          <button className="file-tree-item" type="button" draggable={canManageFiles} onDragStart={() => setDraggedNodeId(node.id)} onDragEnd={() => { setDraggedNodeId(null); setDropTargetId(null) }} onContextMenu={(event) => showContextMenu(event, node)} onClick={() => setOpenFolders((prev) => { const next = new Set(prev); next.has(node.id) ? next.delete(node.id) : next.add(node.id); return next })}>
             <Icon name="chevron" /> <Icon name="folder" />
             {editingNodeId === node.id ? (
               <>
@@ -254,12 +257,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
               </>
             ) : node.nombre}
           </button>
-          <button className="file-tree-add" type="button" title="Crear archivo dentro de esta carpeta" onClick={() => void createNode('archivo', node.id)}><Icon name="newFile" size={14} /></button>
+          {canManageFiles && <button className="file-tree-add" type="button" title="Crear archivo dentro de esta carpeta" onClick={() => void createNode('archivo', node.id)}><Icon name="newFile" size={14} /></button>}
         </div>
         {openFolders.has(node.id) && renderNodes(node.id, depth + 1)}
       </React.Fragment>
     ) : (
-      <button key={node.id} className={`file-tree-item file-tree-file ${node.id === currentDocumentId ? 'active' : ''} ${dropTargetId === node.id ? 'drop-target' : ''}`} style={{ paddingLeft: `${28 + depth * 16}px` }} type="button" draggable onDragStart={() => setDraggedNodeId(node.id)} onDragEnd={() => { setDraggedNodeId(null); setDropTargetId(null) }} onDragOver={(event) => { event.preventDefault(); setDropTargetId(node.id) }} onDragLeave={() => setDropTargetId(null)} onDrop={(event) => void handleDrop(event, node)} onContextMenu={(event) => showContextMenu(event, node)} onClick={() => onOpenDocument(node.id)}>
+      <button key={node.id} className={`file-tree-item file-tree-file ${node.id === currentDocumentId ? 'active' : ''} ${dropTargetId === node.id ? 'drop-target' : ''}`} style={{ paddingLeft: `${28 + depth * 16}px` }} type="button" draggable={canManageFiles} onDragStart={() => setDraggedNodeId(node.id)} onDragEnd={() => { setDraggedNodeId(null); setDropTargetId(null) }} onDragOver={(event) => { event.preventDefault(); setDropTargetId(node.id) }} onDragLeave={() => setDropTargetId(null)} onDrop={(event) => void handleDrop(event, node)} onContextMenu={(event) => showContextMenu(event, node)} onClick={() => onOpenDocument(node.id)}>
         <Icon name={isImageFileName(node.nombre) ? 'image' : 'file'} />
         {editingNodeId === node.id ? (
           <>
@@ -284,21 +287,23 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
 
   if (collapsed) return <button className="file-explorer-collapsed" type="button" onClick={() => setCollapsed(false)} title="Mostrar archivos"><Icon name="chevron" /></button>
   return <aside className="file-explorer">
-    <div className="file-tree-header"><strong><Icon name="chevron" /> File tree</strong><span><button type="button" onClick={() => void createNode('archivo')} title="Crear archivo"><Icon name="newFile" /></button><button type="button" onClick={() => void createNode('carpeta')} title="Crear carpeta"><Icon name="newFolder" /></button><button type="button" onClick={() => uploadRef.current?.click()} title="Subir archivo"><Icon name="upload" /></button><button type="button" onClick={() => setCollapsed(true)} title="Minimizar"><Icon name="close" /></button></span></div>
+    <div className="file-tree-header"><strong><Icon name="chevron" /> File tree</strong><span>{canManageFiles && <><button type="button" onClick={() => void createNode('archivo')} title="Crear archivo"><Icon name="newFile" /></button><button type="button" onClick={() => void createNode('carpeta')} title="Crear carpeta"><Icon name="newFolder" /></button><button type="button" onClick={() => uploadRef.current?.click()} title="Subir archivo"><Icon name="upload" /></button></>}<button type="button" onClick={() => setCollapsed(true)} title="Minimizar"><Icon name="close" /></button></span></div>
     <input ref={uploadRef} type="file" multiple hidden onChange={(event) => void handleUpload(event, uploadRef.current?.getAttribute('data-parent-id') || null)} />
     {error && <div className="file-explorer-error">{error}</div>}
     <div className="file-tree-list" onDragOver={(event) => event.preventDefault()} onDrop={(event) => void handleDrop(event, null)}>{renderNodes(null)}</div>
     <div className="file-outline"><div className="file-outline-title"><Icon name="chevron" /> File outline</div>{sections.length === 0 ? <div className="file-outline-empty">Sin secciones</div> : sections.map((section) => <button key={`${section.line}-${section.title}`} type="button" className={`outline-item level-${section.level}`} onClick={() => onNavigateToLine(section.line)}>{section.title}</button>)}</div>
     {contextMenu && (
       <div className="file-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
+        {canManageFiles && <>
         <button type="button" onClick={() => { void createNode('archivo', contextMenu.node?.tipo_nodo === 'carpeta' ? contextMenu.node.id : contextMenu.node?.padre_id || null); setContextMenu(null) }}>＋ Nuevo archivo</button>
         <button type="button" onClick={() => { void createNode('carpeta', contextMenu.node?.tipo_nodo === 'carpeta' ? contextMenu.node.id : contextMenu.node?.padre_id || null); setContextMenu(null) }}>＋ Nueva carpeta</button>
         <button type="button" onClick={() => { uploadTo(contextMenu.node?.tipo_nodo === 'carpeta' ? contextMenu.node.id : contextMenu.node?.padre_id || null); setContextMenu(null) }}>↑ Subir archivo</button>
-        {contextMenu.node?.tipo_nodo === 'archivo' && contextMenu.node.id !== currentDocumentId && <button type="button" title={getLatexReference(getNodePath(contextMenu.node))} onClick={() => { void insertReference(contextMenu.node!); setContextMenu(null) }}>{'{ }'} Insertar referencia LaTeX</button>}
+        </>}
+        {canManageFiles && contextMenu.node?.tipo_nodo === 'archivo' && contextMenu.node.id !== currentDocumentId && <button type="button" title={getLatexReference(getNodePath(contextMenu.node))} onClick={() => { void insertReference(contextMenu.node!); setContextMenu(null) }}>{'{ }'} Insertar referencia LaTeX</button>}
         {contextMenu.node?.tipo_nodo === 'archivo' && <button type="button" onClick={() => { void navigator.clipboard?.writeText(getNodePath(contextMenu.node!)); setContextMenu(null) }}>⧉ Copiar ruta</button>}
-        {contextMenu.node && <button type="button" onClick={() => startRename(contextMenu.node!)}>✎ Cambiar nombre</button>}
+        {canManageFiles && contextMenu.node && <button type="button" onClick={() => startRename(contextMenu.node!)}>✎ Cambiar nombre</button>}
         {contextMenu.node?.tipo_nodo === 'archivo' && <button type="button" onClick={() => { void downloadProjectNode(projectId, contextMenu.node!); setContextMenu(null) }}>↓ Descargar</button>}
-        {contextMenu.node && <button type="button" className="danger" onClick={() => { setNodeToDelete(contextMenu.node); setContextMenu(null) }}>× Eliminar</button>}
+        {canManageFiles && contextMenu.node && <button type="button" className="danger" onClick={() => { setNodeToDelete(contextMenu.node); setContextMenu(null) }}>× Eliminar</button>}
       </div>
     )}
     {nodeToDelete && (

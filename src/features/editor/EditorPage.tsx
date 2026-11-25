@@ -41,6 +41,16 @@ import './editor-ide.css'
 // Roles que pueden guardar y restaurar versiones (el backend también lo valida)
 const EDIT_ROLES: ReadonlySet<string> = new Set(['propietario', 'editor'])
 
+/**
+ * HU-25: ¿Puede el usuario realizar la acción en el proyecto? Usa los permisos que entrega
+ * el backend; si no vienen (respuesta antigua), se deducen del rol (propietario o editor).
+ */
+function hasPermission(document: LatexDocument | null, action: string): boolean {
+  if (!document) return false
+  if (document.permissions) return document.permissions.includes(action)
+  return EDIT_ROLES.has(document.role ?? '')
+}
+
 // El PDF se genera aunque la bibliografía falle (citas como [?]); en ese caso se abre la consola con la explicación
 function hasBibliographyProblem(warnings: CompilationError[] = []): boolean {
   return warnings.some((warning) => Boolean(warning.friendlyMessage) && (warning.file === 'bibtex' || warning.file === 'biber' || /bibliograf/i.test(warning.message)))
@@ -311,6 +321,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const handleContentChange = (newContent: string) => {
     // Los binarios (imágenes, PDFs...) no se editan: guardarlos como texto los corrompería
     if (currentDocument?.isText === false) return
+    // HU-25: el lector no modifica el contenido (el backend también lo rechaza)
+    if (!canEditContent) return
     if (collab.isActive) {
       // Sin conexión (o sin permisos de edición) el cambio no se acepta para no perderlo al resincronizar
       if (!collab.applyLocalChange(newContent)) return
@@ -360,9 +372,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
       autoSaveTimerRef.current = null
     }
 
-    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false (los binarios no se guardan como texto)
-    if (currentDocument.isText !== false) setSaveStatus('saving')
-    if (currentDocument.isText !== false) try {
+    // 2. Paso 1: Guardar documento en Backend con isAutoSave: false (los binarios no se guardan como texto).
+    // HU-25: el lector no guarda; solo compila lo que ya está guardado
+    const canSave = currentDocument.isText !== false && hasPermission(currentDocument, 'edit_content')
+    if (canSave) setSaveStatus('saving')
+    if (canSave) try {
       const res = await saveDocument(currentDocument.id, currentText, false, 'Guardado manual (Ctrl+S)')
       setSaveStatus('saved')
       setLastSavedAt(new Date(res.document.updatedAt).toLocaleTimeString())
@@ -602,7 +616,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const isBinaryFile = currentDocument?.isText === false
   // Solo los archivos de texto tienen historial de versiones
   const canUseHistory = Boolean(currentDocument?.id) && !isBinaryFile
-  const canEditDocument = EDIT_ROLES.has(currentDocument?.role ?? '')
+  // HU-25: permisos del usuario en el proyecto (los define el backend con su matriz)
+  const canEditContent = hasPermission(currentDocument, 'edit_content')
+  const canManageFiles = hasPermission(currentDocument, 'manage_files')
+  const canManageVersions = hasPermission(currentDocument, 'manage_versions')
+  const isReadOnlyUser = Boolean(currentDocument) && !canEditContent
   const showHistory = isHistoryOpen && canUseHistory && currentDocument !== null
 
   // Las acciones del editor de código requieren que el panel de código esté visible
@@ -619,9 +637,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   // ---------- HU-25: comentarios ----------
   // Permisos que entrega el backend; si no vienen (versión anterior), se deducen del rol
-  const permissions = currentDocument?.permissions
-  const canComment = permissions ? permissions.includes('comment') : canEditDocument
-  const canResolveComments = permissions ? permissions.includes('resolve_comments') : canEditDocument
+  const canComment = hasPermission(currentDocument, 'comment')
+  const canResolveComments = hasPermission(currentDocument, 'resolve_comments')
 
   // Dónde está cada hilo en el texto actual (sigue al texto citado si el documento cambió)
   const commentAnchors = useMemo(() => {
@@ -751,11 +768,20 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         onLineFocused={handleLineFocused}
         citations={citations}
         projectFiles={projectFiles}
-        readOnly={collab.isActive && (!collab.isSynced || !collab.canEdit)}
+        readOnly={!canEditContent || (collab.isActive && (!collab.isSynced || !collab.canEdit))}
         remoteCursors={collab.collaborators}
         onSelectionChange={handleSelectionChange}
         commentRanges={commentRanges}
-        toolbar={<FormattingToolbar onFormat={handleFormat} onFind={handleFind} />}
+        toolbar={
+          isReadOnlyUser ? (
+            <div className="readonly-banner" role="status">
+              <span className="readonly-badge">Solo lectura</span>
+              Puedes ver, compilar, descargar y leer los comentarios. Para editar, pide al propietario acceso de editor.
+            </div>
+          ) : (
+            <FormattingToolbar onFormat={handleFormat} onFind={handleFind} />
+          )
+        }
         customBody={preview}
       />
     )
@@ -775,7 +801,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           key={currentDocument.id}
           documentId={currentDocument.id}
           fileName={currentDocument.name}
-          canEdit={canEditDocument}
+          canEdit={canManageVersions}
           onClose={() => setIsHistoryOpen(false)}
           beforeChange={flushPendingAutoSave}
           onRestored={handleVersionRestored}
@@ -888,7 +914,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         <ShareProjectModal
           projectId={loadedProjectId}
           projectName={projectName}
-          canShare={currentDocument?.role === 'propietario'}
+          canShare={hasPermission(currentDocument, 'manage_members')}
           onClose={() => setIsShareOpen(false)}
           onLeft={() => {
             setIsShareOpen(false)
@@ -944,6 +970,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             onInsertText={handleInsertText}
             onNodesLoaded={setProjectNodes}
             refreshKey={documentId || ''}
+            canManageFiles={canManageFiles}
           />
         )}
 

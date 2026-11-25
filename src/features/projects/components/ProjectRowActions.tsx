@@ -10,6 +10,8 @@ export interface ProjectActionHandlers {
   onArchive: (project: Project) => void
   onRestore: (project: Project) => void
   onDelete: (project: Project) => void
+  /** HU-25: un colaborador sale de un proyecto compartido con él. */
+  onLeave?: (project: Project) => void
 }
 
 interface ActionDefinition {
@@ -63,6 +65,10 @@ function buildActions(project: Project, isArchivedView: boolean, handlers: Proje
       danger: true,
       onClick: () => handlers.onDelete(project),
     })
+  } else if (handlers.onLeave) {
+    // HU-25: quien no es propietario no puede eliminar, pero sí salir del proyecto (como en Overleaf)
+    const onLeave = handlers.onLeave
+    actions.push({ key: 'leave', label: 'Salir del proyecto', icon: 'logout', danger: true, onClick: () => onLeave(project) })
   }
 
   return actions

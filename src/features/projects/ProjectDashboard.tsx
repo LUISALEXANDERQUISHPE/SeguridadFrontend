@@ -9,6 +9,7 @@ import { useInvitations } from './hooks/useInvitations'
 import { InvitationLinkDialog, InvitationsInbox } from './components/InvitationsInbox'
 import { getRoleLabel } from './utils/projectList'
 import type { AcceptResult } from '../../services/invitationService'
+import { leaveProject } from '../../services/projectService'
 import { selectVisibleProjects } from './utils/projectList'
 import { PROJECT_LIMITS, type ProjectFilter, type ProjectModalState, type SortKey, type SortState } from './types'
 import DashboardSidebar from './components/DashboardSidebar'
@@ -185,6 +186,14 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         () => downloadPdfFile(project.documentId ?? '', project.name),
         'Error al descargar el PDF',
       ),
+    onLeave: (project) => {
+      if (!window.confirm(`¿Salir de «${project.name}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`)) return
+      void runWithFeedback(async () => {
+        await leaveProject(project.id)
+        store.refresh()
+        store.showNotice(`Saliste del proyecto "${project.name}".`)
+      }, 'No se pudo salir del proyecto')
+    },
   }
 
   const renderContent = () => {

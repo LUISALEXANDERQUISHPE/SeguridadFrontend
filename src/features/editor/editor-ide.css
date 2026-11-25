@@ -2240,3 +2240,27 @@
     width: 240px;
   }
 }
+
+/* ---------- HU-25: modo lector ---------- */
+.readonly-banner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--ide-border);
+  background: #2b3444;
+  color: var(--ide-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.readonly-badge {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #3a4557;
+  color: var(--ide-text);
+  font-size: 12px;
+  font-weight: 700;
+}
