@@ -33,7 +33,7 @@ Escribe aquí el contenido del documento.
 \\end{document}
 `
 
-const RAW_API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim().replace(/\/$/, '')
+const RAW_API_URL = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/$/, '')
 // Ensure base URL points to the /api prefix correctly
 const BASE_URL = RAW_API_URL.endsWith('/api') ? RAW_API_URL : `${RAW_API_URL}/api`
 
