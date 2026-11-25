@@ -1,40 +1,101 @@
 import { useEffect, useId, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import Modal from '../../../components/common/Modal'
+import Icon from '../../../components/common/Icon'
 import {
+  changeMemberRole,
   getProjectMembers,
-  shareProject,
+  leaveProject,
+  removeProjectMember,
   type ProjectMember,
   type ShareSuggestion,
 } from '../../../services/projectService'
+import {
+  buildInvitationLink,
+  getProjectInvitations,
+  inviteToProject,
+  resendInvitation,
+  revokeInvitation,
+  type ProjectInvitation,
+} from '../../../services/invitationService'
+import type { AssignableRole } from '../../../types/project'
+import { getRoleLabel } from '../../projects/utils/projectList'
 import useShareSuggestions from './useShareSuggestions'
 
 interface ShareProjectModalProps {
   projectId: string
-  /** Solo el propietario puede agregar colaboradores; el resto solo ve la lista. */
+  projectName: string
+  /** Solo el propietario invita y gestiona el acceso; el resto solo ve quién tiene acceso. */
   canShare: boolean
   onClose: () => void
+  /** HU-25: el usuario salió del proyecto (el editor debe cerrarse). */
+  onLeft?: () => void
 }
+
+// Valor especial del selector de cada colaborador para quitarle el acceso
+const REMOVE_ACCESS = '__quitar__'
+
+const ROLE_OPTIONS: Array<{ value: AssignableRole; label: string }> = [
+  { value: 'editor', label: 'Puede editar' },
+  { value: 'lector', label: 'Solo lectura' },
+]
 
 const toMessage = (error: unknown) => (error instanceof Error ? error.message : 'No fue posible completar la operación')
 
-/** Compartir el proyecto por correo para editarlo en tiempo real. */
-export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<ShareProjectModalProps>) {
+/** "ana@x.com, luis@x" -> ["ana@x.com", "luis@x"] */
+const splitEmails = (text: string) => text.split(/[,;\s]+/).map((email) => email.trim()).filter(Boolean)
+
+/** Texto que se está escribiendo después de la última coma (para el autocompletado). */
+const currentFragment = (text: string) => text.split(/[,;]/).at(-1)?.trim() ?? ''
+
+const formatDate = (iso: string) => new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short' })
+
+/**
+ * HU-25: Compartir un proyecto al estilo de Overleaf.
+ * El propietario invita uno o varios correos con un rol; cada persona entra al aceptar.
+ * En "Acceso al proyecto" se ven los colaboradores y las invitaciones pendientes
+ * (copiar enlace, reenviar o revocar).
+ */
+export function ShareProjectModal({ projectId, projectName, canShare, onClose, onLeft }: Readonly<ShareProjectModalProps>) {
   const [members, setMembers] = useState<ProjectMember[]>([])
+  const [invitations, setInvitations] = useState<ProjectInvitation[]>([])
+  // Enlaces que se pueden copiar en esta sesión (el token solo llega al invitar o reenviar)
+  const [links, setLinks] = useState<Record<string, string>>({})
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [email, setEmail] = useState('')
+  const [emails, setEmails] = useState('')
+  const [role, setRole] = useState<AssignableRole>('editor')
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  // Autocompletado de correos de usuarios registrados
+  // Autocompletado del correo que se está escribiendo (después de la última coma)
   const [isListOpen, setIsListOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const listId = useId()
-  const { suggestions, isSearching } = useShareSuggestions(projectId, email, canShare && isListOpen)
-  const showList = isListOpen && suggestions.length > 0
+  const fragment = currentFragment(emails)
+  const { suggestions, isSearching } = useShareSuggestions(projectId, fragment, canShare && isListOpen)
+  const typed = new Set(splitEmails(emails).map((email) => email.toLowerCase()))
+  const visibleSuggestions = suggestions.filter((suggestion) => !typed.has(suggestion.email.toLowerCase()))
+  const showList = isListOpen && visibleSuggestions.length > 0
+
+  useEffect(() => {
+    let mounted = true
+    Promise.all([getProjectMembers(projectId), canShare ? getProjectInvitations(projectId) : Promise.resolve([])])
+      .then(([memberList, invitationList]) => {
+        if (!mounted) return
+        setMembers(memberList)
+        setInvitations(invitationList)
+      })
+      .catch((err: unknown) => { if (mounted) setError(toMessage(err)) })
+      .finally(() => { if (mounted) setIsLoading(false) })
+    return () => { mounted = false }
+  }, [projectId, canShare])
 
   const chooseSuggestion = (suggestion: ShareSuggestion) => {
-    setEmail(suggestion.email)
+    const parts = emails.split(/([,;])/)
+    parts[parts.length - 1] = ` ${suggestion.email}`
+    setEmails(`${parts.join('').replace(/^\s+/, '')}, `)
     setIsListOpen(false)
     setActiveIndex(-1)
   }
@@ -46,14 +107,14 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
     }
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setActiveIndex((index) => (index + 1) % suggestions.length)
+      setActiveIndex((index) => (index + 1) % visibleSuggestions.length)
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setActiveIndex((index) => (index <= 0 ? suggestions.length - 1 : index - 1))
+      setActiveIndex((index) => (index <= 0 ? visibleSuggestions.length - 1 : index - 1))
     } else if (event.key === 'Enter' && activeIndex >= 0) {
       // Enter elige la sugerencia resaltada en lugar de enviar el formulario
       event.preventDefault()
-      chooseSuggestion(suggestions[activeIndex])
+      chooseSuggestion(visibleSuggestions[activeIndex])
     } else if (event.key === 'Escape') {
       // Cierra solo la lista, no el modal
       event.preventDefault()
@@ -62,20 +123,16 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
     }
   }
 
-  useEffect(() => {
-    let mounted = true
-    getProjectMembers(projectId)
-      .then((list) => { if (mounted) setMembers(list) })
-      .catch((err: unknown) => { if (mounted) setError(toMessage(err)) })
-      .finally(() => { if (mounted) setIsLoading(false) })
-    return () => { mounted = false }
-  }, [projectId])
+  const rememberLinks = (list: ProjectInvitation[]) => {
+    const fresh = Object.fromEntries(list.filter((item) => item.token).map((item) => [item.id, buildInvitationLink(item.token!)]))
+    setLinks((previous) => ({ ...previous, ...fresh }))
+  }
 
   const handleSubmit = async (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const value = email.trim()
-    if (!value) {
-      setError('Escribe el correo de la persona con la que quieres compartir')
+    const list = splitEmails(emails)
+    if (list.length === 0) {
+      setError('Escribe al menos un correo electrónico')
       return
     }
     setIsListOpen(false)
@@ -83,10 +140,21 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
     setError(null)
     setNotice(null)
     try {
-      const member = await shareProject(projectId, value)
-      setMembers((previous) => [...previous, member])
-      setEmail('')
-      setNotice(`${member.name || member.email} ya puede abrir el proyecto y editarlo contigo en tiempo real.`)
+      const result = await inviteToProject(projectId, list, role)
+      rememberLinks(result.invitations)
+      setInvitations((previous) => [
+        ...previous.filter((item) => !result.invitations.some((created) => created.id === item.id)),
+        ...result.invitations.map(({ token: _token, ...rest }) => rest),
+      ])
+      setEmails('')
+      const parts: string[] = []
+      if (result.invitations.length > 0) {
+        parts.push(`Invitación enviada a ${result.invitations.map((item) => item.email).join(', ')}. Entrará al proyecto cuando la acepte.`)
+      }
+      if (result.skipped.length > 0) {
+        parts.push(`Omitidos: ${result.skipped.map((item) => `${item.email} (${item.reason})`).join('; ')}.`)
+      }
+      setNotice(parts.join(' '))
     } catch (err: unknown) {
       setError(toMessage(err))
     } finally {
@@ -94,42 +162,110 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
     }
   }
 
+  const runInvitationAction = async (invitationId: string, action: () => Promise<void>) => {
+    setBusyId(invitationId)
+    setError(null)
+    setNotice(null)
+    try {
+      await action()
+    } catch (err: unknown) {
+      setError(toMessage(err))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleResend = (invitation: ProjectInvitation) =>
+    runInvitationAction(invitation.id, async () => {
+      const updated = await resendInvitation(projectId, invitation.id)
+      rememberLinks([updated])
+      setInvitations((previous) => previous.map((item) => (item.id === updated.id ? { ...updated, token: undefined } : item)))
+      setNotice(`Invitación reenviada a ${invitation.email}. El enlace anterior ya no funciona.`)
+    })
+
+  const handleRevoke = (invitation: ProjectInvitation) =>
+    runInvitationAction(invitation.id, async () => {
+      await revokeInvitation(projectId, invitation.id)
+      setInvitations((previous) => previous.filter((item) => item.id !== invitation.id))
+      setNotice(`Se revocó la invitación de ${invitation.email}.`)
+    })
+
+  // HU-25: cambiar el rol de un colaborador o quitarle el acceso (desde su selector)
+  const handleMemberChange = (member: ProjectMember, value: string) => {
+    const who = member.name || member.email || 'Esa persona'
+    if (value === REMOVE_ACCESS) {
+      if (!window.confirm(`¿Quitar el acceso de ${who} al proyecto? Si lo tiene abierto, se le cerrará.`)) return
+      void runInvitationAction(member.userId, async () => {
+        await removeProjectMember(projectId, member.userId)
+        setMembers((previous) => previous.filter((item) => item.userId !== member.userId))
+        setNotice(`${who} ya no tiene acceso al proyecto.`)
+      })
+      return
+    }
+    const role = value as AssignableRole
+    void runInvitationAction(member.userId, async () => {
+      await changeMemberRole(projectId, member.userId, role)
+      setMembers((previous) => previous.map((item) => (item.userId === member.userId ? { ...item, role } : item)))
+      setNotice(`${who} ahora es ${getRoleLabel(role).toLowerCase()}.`)
+    })
+  }
+
+  const handleLeave = () => {
+    if (!window.confirm(`¿Salir de «${projectName}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`)) return
+    void runInvitationAction('leave', async () => {
+      await leaveProject(projectId)
+      onLeft?.()
+    })
+  }
+
+  const handleCopy = async (invitationId: string) => {
+    try {
+      await navigator.clipboard.writeText(links[invitationId])
+      setCopiedId(invitationId)
+      setTimeout(() => setCopiedId((current) => (current === invitationId ? null : current)), 2000)
+    } catch {
+      setError('No se pudo copiar el enlace. Cópialo manualmente.')
+    }
+  }
+
+  const accessCount = members.length + invitations.length
+
   return (
-    <Modal title="Compartir proyecto" icon="users" isBusy={isSubmitting} onClose={onClose}>
+    <Modal title={`Compartir ${projectName}`} icon="users" size="wide" isBusy={isSubmitting} onClose={onClose}>
       {error && <p className="pm-alert pm-alert-error" role="alert">{error}</p>}
       {notice && <p className="pm-alert collab-share-notice" role="status">{notice}</p>}
 
       {canShare ? (
-        <form onSubmit={(event) => void handleSubmit(event)} className="pm-form" noValidate>
-          <div className="pm-field">
-            <label htmlFor="share-email">Correo del colaborador</label>
-            <div className="collab-autocomplete">
+        <form onSubmit={(event) => void handleSubmit(event)} className="share-invite-form" noValidate>
+          <label htmlFor="share-emails" className="share-label">Ingresa correos electrónicos separados por comas</label>
+          <div className="share-invite-row">
+            <div className="collab-autocomplete share-invite-input">
               <input
-                id="share-email"
+                id="share-emails"
                 data-autofocus
-                type="email"
-                placeholder="Escribe al menos 3 letras del correo"
-                value={email}
+                type="text"
+                inputMode="email"
+                placeholder="ana@correo.com, luis@correo.com"
+                value={emails}
                 onChange={(event) => {
-                  setEmail(event.target.value)
+                  setEmails(event.target.value)
                   setIsListOpen(true)
                   setActiveIndex(-1)
                 }}
                 onKeyDown={handleEmailKeyDown}
                 onBlur={() => setIsListOpen(false)}
-                maxLength={254}
+                maxLength={2600}
                 autoComplete="off"
-                required
                 role="combobox"
                 aria-autocomplete="list"
                 aria-expanded={showList}
                 aria-controls={listId}
                 aria-activedescendant={showList && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
               />
-              {isSearching && <span className="collab-autocomplete-spinner" aria-hidden="true" />}
+              {isSearching && fragment.length >= 3 && <span className="collab-autocomplete-spinner" aria-hidden="true" />}
               {showList && (
                 <ul id={listId} className="collab-autocomplete-list" role="listbox" aria-label="Usuarios sugeridos">
-                  {suggestions.map((suggestion, index) => (
+                  {visibleSuggestions.map((suggestion, index) => (
                     <li
                       key={suggestion.email}
                       id={`${listId}-${index}`}
@@ -150,37 +286,113 @@ export function ShareProjectModal({ projectId, canShare, onClose }: Readonly<Sha
                 </ul>
               )}
             </div>
-          </div>
-          <p className="pm-hint">La persona debe tener una cuenta registrada. Entrará como editor.</p>
-          <div className="pm-dialog-actions">
-            <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
-              Cerrar
+            <select
+              className="share-role-select"
+              value={role}
+              onChange={(event) => setRole(event.target.value as AssignableRole)}
+              aria-label="Permiso de las personas invitadas"
+            >
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <button type="submit" className="pm-btn pm-btn-primary share-invite-btn" disabled={isSubmitting || !emails.trim()}>
+              {isSubmitting ? 'Invitando...' : 'Invitar'}
             </button>
-            <button type="submit" className="pm-btn pm-btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Compartiendo...' : 'Compartir'}
-            </button>
           </div>
+          <p className="share-help">
+            La persona recibe la invitación en su panel de proyectos y entra al aceptarla. Si aún no tiene cuenta,
+            la verá al registrarse con ese correo.
+          </p>
         </form>
       ) : (
-        <p className="pm-hint">Solo el propietario puede agregar colaboradores.</p>
+        <p className="pm-hint">Solo el propietario puede invitar personas y cambiar los permisos.</p>
       )}
 
-      <h3 className="collab-members-title">Colaboradores</h3>
-      {isLoading ? (
-        <p className="pm-hint">Cargando...</p>
-      ) : members.length === 0 ? (
-        <p className="pm-hint">Todavía no has compartido este proyecto.</p>
-      ) : (
-        <ul className="collab-members-list">
-          {members.map((member) => (
-            <li key={member.userId}>
-              <span className="collab-member-name">{member.name || member.email}</span>
-              {member.name && <span className="collab-member-email">{member.email}</span>}
-              <span className="collab-member-role">{member.role}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className="share-access" aria-labelledby="share-access-title">
+        <h3 id="share-access-title" className="share-access-title">Acceso al proyecto</h3>
+        {isLoading && <p className="share-empty">Cargando...</p>}
+        {!isLoading && accessCount === 0 && (
+          <p className="share-empty">
+            <Icon name="users" size={16} /> Nadie ha sido invitado todavía
+          </p>
+        )}
+        {!isLoading && accessCount > 0 && (
+          <ul className="share-access-list">
+            {members.map((member) => (
+              <li key={member.userId} className="share-person">
+                <span className="share-avatar" aria-hidden="true">{(member.name || member.email || '?').charAt(0).toUpperCase()}</span>
+                <span className="share-person-text">
+                  <span className="share-person-name">{member.name || member.email}</span>
+                  {member.name && <span className="share-person-email">{member.email}</span>}
+                </span>
+                {canShare ? (
+                  <select
+                    className="share-member-select"
+                    value={member.role}
+                    onChange={(event) => handleMemberChange(member, event.target.value)}
+                    disabled={busyId === member.userId}
+                    aria-label={`Permiso de ${member.name || member.email}`}
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                    {/* Roles heredados: se muestran tal cual hasta que el propietario los cambie */}
+                    {!ROLE_OPTIONS.some((option) => option.value === member.role) && (
+                      <option value={member.role} disabled>{getRoleLabel(member.role)}</option>
+                    )}
+                    <option value={REMOVE_ACCESS}>Quitar acceso</option>
+                  </select>
+                ) : (
+                  <span className="share-role-label">{getRoleLabel(member.role)}</span>
+                )}
+              </li>
+            ))}
+            {invitations.map((invitation) => (
+              <li key={invitation.id} className="share-person is-pending">
+                <span className="share-avatar" aria-hidden="true">{invitation.email.charAt(0).toUpperCase()}</span>
+                <span className="share-person-text">
+                  <span className="share-person-name">
+                    {invitation.email} <span className="share-pending-tag">Invitación pendiente</span>
+                  </span>
+                  <span className="share-person-email">
+                    {getRoleLabel(invitation.role)} · vence el {formatDate(invitation.expiresAt)}
+                  </span>
+                </span>
+                <span className="share-person-actions">
+                  {links[invitation.id] && (
+                    <button type="button" className="share-link-btn" onClick={() => void handleCopy(invitation.id)} disabled={busyId === invitation.id}>
+                      <Icon name="link" size={14} /> {copiedId === invitation.id ? '¡Copiado!' : 'Copiar enlace'}
+                    </button>
+                  )}
+                  <button type="button" className="share-link-btn" onClick={() => void handleResend(invitation)} disabled={busyId === invitation.id}>
+                    Reenviar
+                  </button>
+                  <button type="button" className="share-link-btn is-danger" onClick={() => void handleRevoke(invitation)} disabled={busyId === invitation.id}>
+                    Revocar
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <div className="pm-dialog-actions">
+        {!canShare && onLeft && (
+          <button
+            type="button"
+            className="pm-btn pm-btn-ghost is-danger share-leave-btn"
+            onClick={handleLeave}
+            disabled={busyId === 'leave'}
+          >
+            {busyId === 'leave' ? 'Saliendo...' : 'Salir del proyecto'}
+          </button>
+        )}
+        <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
+          Cerrar
+        </button>
+      </div>
     </Modal>
   )
 }

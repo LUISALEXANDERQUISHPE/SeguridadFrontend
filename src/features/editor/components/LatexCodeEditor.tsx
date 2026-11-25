@@ -10,6 +10,7 @@ import type { BibEntry } from '../../../utils/bibtex'
 import { isImageFileName } from '../../../utils/fileTypes'
 import { applyFormatting, type FormattingAction } from '../utils/latexFormatting'
 import RemoteCursors from '../collab/RemoteCursors'
+import CommentHighlights, { type CommentRange } from '../comments/CommentHighlights'
 import type { Collaborator } from '../collab/useCollaboration'
 
 /** Operaciones que otros componentes (barra de formato, menús) pueden pedirle al editor. */
@@ -18,6 +19,10 @@ export interface LatexEditorHandle {
   toggleFind: () => void
   /** Textarea del editor (para conservar el cursor local cuando llegan cambios de otros colaboradores). */
   getTextarea: () => HTMLTextAreaElement | null
+  /** HU-25: selección actual (para comentarla). */
+  getSelection: () => { start: number; end: number; text: string } | null
+  /** HU-25: selecciona un rango y lo lleva a la vista (al abrir un comentario). */
+  selectRange: (start: number, end: number) => void
 }
 
 interface LatexCodeEditorProps {
@@ -45,6 +50,8 @@ interface LatexCodeEditorProps {
   remoteCursors?: Collaborator[]
   // Notifica la selección local (anchor = donde empezó, head = donde está el cursor)
   onSelectionChange?: (anchor: number, head: number) => void
+  // HU-25: fragmentos comentados que se resaltan en el texto
+  commentRanges?: CommentRange[]
 }
 
 // Resaltador de sintaxis LaTeX básico y rápido para el backdrop
@@ -114,6 +121,7 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
   toolbar,
   remoteCursors = [],
   onSelectionChange,
+  commentRanges = [],
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
@@ -148,6 +156,22 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
       },
       toggleFind: () => setShowFind((prev) => !prev),
       getTextarea: () => textareaRef.current,
+      getSelection: () => {
+        const textarea = textareaRef.current
+        if (!textarea) return null
+        const start = Math.min(textarea.selectionStart, textarea.selectionEnd)
+        const end = Math.max(textarea.selectionStart, textarea.selectionEnd)
+        return { start, end, text: value.slice(start, end) }
+      },
+      selectRange: (start, end) => {
+        const textarea = textareaRef.current
+        if (!textarea) return
+        textarea.focus()
+        textarea.setSelectionRange(start, end)
+        // Centrar la línea del rango en la vista
+        const line = value.slice(0, start).split('\n').length - 1
+        textarea.scrollTop = Math.max(0, line * 22 - textarea.clientHeight / 3)
+      },
     }),
     [value, onChange, readOnly],
   )
@@ -638,6 +662,15 @@ export const LatexCodeEditor: React.FC<LatexCodeEditorProps> = ({
           <pre ref={preRef} className="editor-highlight-layer" aria-hidden="true">
             <code dangerouslySetInnerHTML={{ __html: highlightedCode }} />
           </pre>
+
+          {commentRanges.length > 0 && (
+            <CommentHighlights
+              text={value}
+              ranges={commentRanges}
+              scrollTop={editorScrollTop}
+              scrollLeft={editorScrollLeft}
+            />
+          )}
 
           {remoteCursors.length > 0 && (
             <RemoteCursors

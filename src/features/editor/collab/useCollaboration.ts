@@ -49,6 +49,15 @@ type ServerMessage =
   | { type: 'saved'; savedAt: string }
   | { type: 'save-error'; message: string }
   | { type: 'error'; message: string }
+  // HU-25: el propietario cambió el rol de este usuario mientras tenía el archivo abierto
+  | { type: 'access'; canEdit: boolean }
+  // HU-25: alguien creó, editó, resolvió o borró un comentario de este archivo
+  | { type: 'comments-changed' }
+
+/** HU-25: el servidor cerró la conexión porque el usuario ya no tiene acceso al proyecto. */
+const ACCESS_REVOKED_CODE = 4403
+/** Cierre propio (no fatal) para reconectar y partir del estado del servidor. */
+const RESYNC_CODE = 4000
 
 interface UseCollaborationOptions {
   documentId: string | null
@@ -59,6 +68,12 @@ interface UseCollaborationOptions {
   onRemoteChange: (content: string, mapIndex: (index: number) => number) => void
   onSaved: (savedAt: string) => void
   onSaveError: () => void
+  /** HU-25: cambió el permiso de edición del usuario (ej. pasó de editor a lector). */
+  onAccessChanged?: (canEdit: boolean) => void
+  /** HU-25: al usuario le quitaron el acceso al proyecto. */
+  onAccessRevoked?: (reason: string) => void
+  /** HU-25: los comentarios del archivo cambiaron (hay que recargarlos). */
+  onCommentsChanged?: () => void
 }
 
 /**
@@ -69,7 +84,17 @@ interface UseCollaborationOptions {
  * resultado en la base de datos. Cada reconexión parte de un documento nuevo con el estado del
  * servidor, por eso el editor queda en solo lectura mientras no hay conexión.
  */
-export function useCollaboration({ documentId, enabled, onSynced, onRemoteChange, onSaved, onSaveError }: UseCollaborationOptions) {
+export function useCollaboration({
+  documentId,
+  enabled,
+  onSynced,
+  onRemoteChange,
+  onSaved,
+  onSaveError,
+  onAccessChanged,
+  onAccessRevoked,
+  onCommentsChanged,
+}: UseCollaborationOptions) {
   const [status, setStatus] = useState<CollabStatus>('disabled')
   const [canEdit, setCanEdit] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -85,9 +110,9 @@ export function useCollaboration({ documentId, enabled, onSynced, onRemoteChange
   const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Callbacks en refs: así la conexión no se reinicia cuando el componente se vuelve a renderizar
-  const callbacksRef = useRef({ onSynced, onRemoteChange, onSaved, onSaveError })
+  const callbacksRef = useRef({ onSynced, onRemoteChange, onSaved, onSaveError, onAccessChanged, onAccessRevoked, onCommentsChanged })
   useLayoutEffect(() => {
-    callbacksRef.current = { onSynced, onRemoteChange, onSaved, onSaveError }
+    callbacksRef.current = { onSynced, onRemoteChange, onSaved, onSaveError, onAccessChanged, onAccessRevoked, onCommentsChanged }
   })
 
   /** Recalcula las posiciones absolutas de los cursores remotos en el texto actual. */
@@ -212,6 +237,19 @@ export function useCollaboration({ documentId, enabled, onSynced, onRemoteChange
           case 'error':
             setErrorMessage(message.message)
             break
+          case 'access': {
+            const lostEdit = canEditRef.current && !message.canEdit
+            canEditRef.current = message.canEdit
+            setCanEdit(message.canEdit)
+            callbacksRef.current.onAccessChanged?.(message.canEdit)
+            // Al perder la edición, cambios locales aún no aceptados quedarían solo en este equipo:
+            // se reconecta para partir exactamente del contenido del servidor
+            if (lostEdit) socket.close(RESYNC_CODE, 'Permisos actualizados')
+            break
+          }
+          case 'comments-changed':
+            callbacksRef.current.onCommentsChanged?.()
+            break
         }
       }
 
@@ -225,10 +263,14 @@ export function useCollaboration({ documentId, enabled, onSynced, onRemoteChange
         if (FATAL_CLOSE_CODES.has(event.code)) {
           setStatus('error')
           setErrorMessage(event.reason || 'No fue posible unirse a la edición colaborativa')
+          if (event.code === ACCESS_REVOKED_CODE) {
+            callbacksRef.current.onAccessRevoked?.(event.reason || 'Ya no tienes acceso a este proyecto')
+          }
           return
         }
 
-        attempts++
+        // Resincronización pedida por este mismo cliente: reconectar de inmediato
+        if (event.code !== RESYNC_CODE) attempts++
         setStatus('reconnecting')
         const delay = Math.min(MAX_RECONNECT_DELAY_MS, 500 * 2 ** Math.min(attempts, 5))
         reconnectTimer = setTimeout(connect, delay)

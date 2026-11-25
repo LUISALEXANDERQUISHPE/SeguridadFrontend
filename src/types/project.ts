@@ -1,6 +1,10 @@
 import type { LastCompilation } from './document'
 
-export type ProjectRole = 'propietario' | 'editor' | 'revisor' | 'invitado'
+// HU-25: roles visibles propietario, editor y lector; revisor e invitado son heredados
+export type ProjectRole = 'propietario' | 'editor' | 'lector' | 'revisor' | 'invitado'
+
+/** Roles que el propietario puede asignar al invitar o cambiar el acceso. */
+export type AssignableRole = 'editor' | 'lector'
 
 export interface Project {
   id: string

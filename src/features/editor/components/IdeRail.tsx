@@ -7,6 +7,10 @@ interface IdeRailProps {
   onToggleSidePanel: () => void
   onFind: () => void
   onToggleConsole: () => void
+  // HU-25: panel de comentarios (solo archivos de texto)
+  isCommentsOpen?: boolean
+  commentCount?: number
+  onToggleComments?: () => void
 }
 
 /** Riel vertical de accesos rápidos a la izquierda del editor. */
@@ -17,6 +21,9 @@ export function IdeRail({
   onToggleSidePanel,
   onFind,
   onToggleConsole,
+  isCommentsOpen = false,
+  commentCount = 0,
+  onToggleComments,
 }: Readonly<IdeRailProps>) {
   return (
     <nav className="ide-rail" aria-label="Paneles del editor">
@@ -44,6 +51,19 @@ export function IdeRail({
         <Icon name="terminal" size={18} />
         {errorCount > 0 && <span className="ide-rail-badge">{errorCount}</span>}
       </button>
+      {onToggleComments && (
+        <button
+          type="button"
+          className={`ide-rail-btn ${isCommentsOpen ? 'is-active' : ''}`}
+          onClick={onToggleComments}
+          aria-pressed={isCommentsOpen}
+          title="Comentarios"
+          aria-label={`Comentarios (${commentCount} abiertos)`}
+        >
+          <Icon name="edit" size={18} />
+          {commentCount > 0 && <span className="ide-rail-badge is-info">{commentCount}</span>}
+        </button>
+      )}
     </nav>
   )
 }
