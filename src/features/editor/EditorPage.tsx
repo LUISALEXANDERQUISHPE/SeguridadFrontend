@@ -358,7 +358,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           setPdfUrl(compRes.pdfUrl)
           setPreviousPdfUrl(compRes.pdfUrl)
         }
-        if (hasBibliographyProblem(compRes.warnings)) setIsConsoleOpen(true)
+        // Compilación limpia: volver al PDF; si la bibliografía falló, mostrar el registro con la explicación
+        setIsConsoleOpen(hasBibliographyProblem(compRes.warnings))
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -367,7 +368,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         if (!prevPdf) {
           setPdfUrl(null)
         }
-        // 5. Mostrar errores en la consola inferior
+        // 5. Mostrar los errores en el registro (panel del PDF)
         setIsConsoleOpen(true)
       }
     } catch (err: unknown) {
@@ -422,7 +423,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
           setPdfUrl(res.pdfUrl)
           setPreviousPdfUrl(res.pdfUrl)
         }
-        if (hasBibliographyProblem(res.warnings)) setIsConsoleOpen(true)
+        // Compilación limpia: volver al PDF; si la bibliografía falló, mostrar el registro con la explicación
+        setIsConsoleOpen(hasBibliographyProblem(res.warnings))
       } else {
         console.log('[PDF] solicitud omitida porque success=false')
         setCompileStatus('failed')
@@ -468,6 +470,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
 
   // 6. Navegación a la línea seleccionada en la consola (abre el archivo si el error está en otro, ej. capitulos/intro.tex)
   const handleErrorClick = useCallback(async (line: number, file?: string) => {
+    // Con el diseño "solo PDF" el código no se ve: pasar a vista dividida para mostrar la línea
+    setLayout((current) => (current === 'pdf' ? 'split' : current))
     if (file && loadedProjectId && currentDocument) {
       try {
         const { nodes } = await getProjectTree(loadedProjectId)
@@ -565,7 +569,17 @@ export const EditorPage: React.FC<EditorPageProps> = ({
     }
   }, [isDragging])
 
-  const toggleConsole = () => setIsConsoleOpen((prev) => !prev)
+  // El registro se muestra en el panel del PDF (como en Overleaf): al abrirlo, ese panel debe estar visible
+  const toggleConsole = () => {
+    const logsVisible = isConsoleOpen && layout !== 'editor' && !isHistoryOpen
+    if (logsVisible) {
+      setIsConsoleOpen(false)
+      return
+    }
+    setIsHistoryOpen(false)
+    if (layout === 'editor') setLayout('split')
+    setIsConsoleOpen(true)
+  }
   const toggleSidePanel = () => setIsSidePanelOpen((prev) => !prev)
   const isBinaryFile = currentDocument?.isText === false
   // Solo los archivos de texto tienen historial de versiones
@@ -717,20 +731,21 @@ export const EditorPage: React.FC<EditorPageProps> = ({
             onCompileRequest={() => void handleCompile()}
             errorCount={errors.length}
             onToggleLogs={toggleConsole}
+            logsOpen={isConsoleOpen}
+            logsPanel={
+              <CompilationConsole
+                errors={errors}
+                warnings={warnings}
+                log={compilationLog}
+                compilationTime={compilationTime}
+                documentName={currentDocument?.name}
+                onErrorClick={(line, file) => void handleErrorClick(line, file)}
+              />
+            }
           />
         </section>
       )}
     </div>
-
-    <CompilationConsole
-      errors={errors}
-      warnings={warnings}
-      log={compilationLog}
-      compilationTime={compilationTime}
-      onErrorClick={(line, file) => void handleErrorClick(line, file)}
-      isOpen={isConsoleOpen}
-      onToggleOpen={toggleConsole}
-    />
       </>
     )
   }
