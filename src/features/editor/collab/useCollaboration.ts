@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import * as Y from 'yjs'
 import { getAuthToken } from '../../../services/documentService'
 import { REALTIME_URL } from '../../../services/realtime'
+import { openSecureWebSocket, type SecureWebSocket } from '../../../security'
 import { base64ToBytes, bytesToBase64, computeTextChange, mapIndexThroughDelta, type TextDelta } from './textSync'
 
 // Debe coincidir con TEXT_KEY del backend (src/realtime/collabRoom.js)
@@ -101,7 +102,7 @@ export function useCollaboration({
   const [collaborators, setCollaborators] = useState<Collaborator[]>([])
 
   const docRef = useRef<Y.Doc | null>(null)
-  const socketRef = useRef<WebSocket | null>(null)
+  const socketRef = useRef<SecureWebSocket | null>(null)
   const syncedRef = useRef(false)
   const canEditRef = useRef(false)
   const presenceRef = useRef<Map<number, PresenceUser>>(new Map())
@@ -182,7 +183,8 @@ export function useCollaboration({
       })
 
       setStatus(attempts === 0 ? 'connecting' : 'reconnecting')
-      const socket = new WebSocket(REALTIME_URL)
+      // Cada trama viaja cifrada con ChaCha20 (la llave se acordó con Diffie-Hellman)
+      const socket = openSecureWebSocket(REALTIME_URL)
       socketRef.current = socket
 
       socket.onopen = () => {

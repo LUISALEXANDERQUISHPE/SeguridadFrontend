@@ -5,7 +5,9 @@ import { supabase } from '../../../services/supabase'
 export async function loginWithGoogle() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    // La "/" final es necesaria: Supabase compara contra patrones como "https://*.*.devtunnels.ms/**"
+    // y sin ella la URL no coincide y regresa al Site URL (localhost)
+    options: { redirectTo: `${window.location.origin}/` },
   })
   if (error) throw error
 }
