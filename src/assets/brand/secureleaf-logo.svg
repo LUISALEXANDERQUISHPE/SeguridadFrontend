@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64" viewBox="0 0 260 64" role="img" aria-label="Secureleaf">
+  <title>Secureleaf</title>
+  <!-- Ícono -->
+  <rect width="64" height="64" rx="14" fill="#17392d"/>
+  <path d="M14 50 C14 27 28 13 51 13 C51 36 37 50 14 50 Z" fill="#b6d6c6"/>
+  <path d="M14 50 L9 55" stroke="#b6d6c6" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="32.5" cy="29" r="5" fill="#17392d"/>
+  <path d="M30 31.5 L35 31.5 L36.5 41 L28.5 41 Z" fill="#17392d"/>
+  <!-- Nombre (misma tipografía que la cabecera de la app) -->
+  <text x="78" y="43" fill="#17392d" font-family="Georgia, 'Times New Roman', serif" font-size="32" font-weight="700" letter-spacing="-0.5">Secureleaf</text>
+</svg>
