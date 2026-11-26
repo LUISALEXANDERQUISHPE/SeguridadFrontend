@@ -1,9 +1,11 @@
 import { getAuthToken } from './documentService'
+import { secureFetch } from '../security'
 
 const API_URL = (import.meta.env.VITE_API_URL || '/api').trim().replace(/\/$/, '')
 
+/** Petición a la API por el canal cifrado (ChaCha20): cuerpo, token y respuesta viajan cifrados. */
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await secureFetch(path, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

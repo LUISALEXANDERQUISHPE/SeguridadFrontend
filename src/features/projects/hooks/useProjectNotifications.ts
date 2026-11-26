@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { getAuthToken } from '../../../services/documentService'
 import { REALTIME_URL } from '../../../services/realtime'
+import { openSecureWebSocket, type SecureWebSocket } from '../../../security'
 
 /** HU-25: avisos en tiempo real relacionados con invitaciones y acceso a proyectos. */
 export type ProjectNotification =
@@ -39,14 +40,15 @@ export function useProjectNotifications(onNotification: (event: ProjectNotificat
   useEffect(() => {
     let disposed = false
     let attempts = 0
-    let socket: WebSocket | null = null
+    let socket: SecureWebSocket | null = null
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
     const connect = () => {
       const token = getAuthToken()
       if (!token) return
 
-      socket = new WebSocket(REALTIME_URL)
+      // Avisos cifrados con ChaCha20, igual que la edición en tiempo real
+      socket = openSecureWebSocket(REALTIME_URL)
       socket.onopen = () => socket?.send(JSON.stringify({ type: 'subscribe', token }))
       socket.onmessage = (event) => {
         try {
