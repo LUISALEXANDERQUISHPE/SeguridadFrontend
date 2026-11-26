@@ -1,32 +1,31 @@
 import { createGroup, computeSharedSecret, generateKeyPair, type DhGroup } from './diffieHellman.ts'
-import { fromBase64, toBase64 } from './bytes.ts'
-import {
-  DIRECTIONS,
-  deriveSessionKeys,
-  isEnvelope,
-  openFrame,
-  openJson,
-  sealFrame,
-  sealJson,
-  type SessionKeys,
-} from './transportCipher.ts'
+import { fromBase64, toBase64, toHex } from './bytes.ts'
+import { randomBytes } from './random.ts'
+import { DIRECTIONS, deriveSessionKeys, openFrame, packMessage, sealFrame, unpackMessage, type SessionKeys } from './transportCipher.ts'
+import { SecureWebSocket } from './secureWebSocket.ts'
 
 /**
  * Cliente del canal cifrado:
  *   1. Acuerda con el servidor una llave temporal con Diffie-Hellman (POST /secure/handshake).
- *   2. Cifra con ChaCha20 cada petición y descifra cada respuesta.
- * La llave vive solo en memoria: al recargar la página se acuerda otra.
+ *      La llave nunca viaja por la red y vive solo en memoria (al recargar se acuerda otra).
+ *   2. fetch(): envía cada petición (método, ruta, cabeceras con el token y cuerpo) cifrada con
+ *      ChaCha20 por POST /secure/tunnel y devuelve la respuesta descifrada como un Response normal.
+ *   3. openWebSocket(): WebSocket con cada trama cifrada (edición en tiempo real y avisos).
  */
 
 const SESSION_HEADER = 'X-Secure-Session'
 const SESSION_EXPIRED_CODE = 'SECURE_SESSION_EXPIRED'
 // Se renueva un poco antes de que el servidor la dé por vencida
 const EXPIRY_MARGIN_MS = 30_000
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304])
+const TUNNEL_PREFIX = '/api'
 
 export interface SecureSession {
   sessionId: string
   keys: SessionKeys
   expiresAt: number
+  // Diferencia entre la hora del servidor y la del equipo (el servidor rechaza peticiones viejas)
+  clockOffsetMs: number
 }
 
 export interface SecureClientOptions {
@@ -34,12 +33,20 @@ export interface SecureClientOptions {
   dhPrimeHex: string
   dhGenerator: string
   fetchImpl?: typeof fetch
+  WebSocketImpl?: typeof WebSocket
 }
 
-export interface SecureRequestOptions {
-  method?: string
-  body?: unknown
-  headers?: Record<string, string>
+interface EncodedRequest {
+  method: string
+  url: string
+  headers: Record<string, string>
+  body: Uint8Array
+}
+
+interface ResponseMeta {
+  rid: string
+  status: number
+  headers: Record<string, string>
 }
 
 type ErrorBody = { error?: string | { message?: string; code?: string } }
@@ -48,7 +55,19 @@ function errorFrom(body: ErrorBody): { message?: string; code?: string } {
   return typeof body.error === 'string' ? { message: body.error } : body.error ?? {}
 }
 
-export function createSecureClient({ baseUrl, dhPrimeHex, dhGenerator, fetchImpl = fetch }: SecureClientOptions) {
+/** Normaliza el cuerpo y las cabeceras igual que lo haría fetch (texto, JSON, FormData, Blob...). */
+async function encodeRequest(path: string, init: RequestInit): Promise<EncodedRequest> {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  const request = new Request(new URL(cleanPath, 'http://canal-cifrado.local'), { ...init, signal: undefined })
+  const headers: Record<string, string> = {}
+  request.headers.forEach((value, name) => {
+    headers[name] = value
+  })
+  const body = init.body == null ? new Uint8Array(0) : new Uint8Array(await request.arrayBuffer())
+  return { method: request.method, url: `${TUNNEL_PREFIX}${cleanPath}`, headers, body }
+}
+
+export function createSecureClient({ baseUrl, dhPrimeHex, dhGenerator, fetchImpl = fetch, WebSocketImpl }: SecureClientOptions) {
   let group: DhGroup | null = null
   let pending: Promise<SecureSession> | null = null
 
@@ -64,6 +83,7 @@ export function createSecureClient({ baseUrl, dhPrimeHex, dhGenerator, fetchImpl
       sessionId?: string
       serverPublicKey?: string
       expiresAt?: string
+      serverTime?: number
     }
     if (!response.ok || !body.sessionId || !body.serverPublicKey) {
       throw new Error(errorFrom(body).message || 'No fue posible establecer el canal cifrado')
@@ -75,6 +95,7 @@ export function createSecureClient({ baseUrl, dhPrimeHex, dhGenerator, fetchImpl
       sessionId: body.sessionId,
       keys: deriveSessionKeys(sharedSecret, client.publicKey, serverPublicKey),
       expiresAt: body.expiresAt ? Date.parse(body.expiresAt) : Date.now() + 5 * 60_000,
+      clockOffsetMs: typeof body.serverTime === 'number' ? body.serverTime - Date.now() : 0,
     }
   }
 
@@ -96,50 +117,58 @@ export function createSecureClient({ baseUrl, dhPrimeHex, dhGenerator, fetchImpl
     pending = null
   }
 
-  async function send<T>(path: string, options: SecureRequestOptions, session: SecureSession) {
-    const hasBody = options.body !== undefined
-    const response = await fetchImpl(`${baseUrl}${path}`, {
-      method: options.method ?? (hasBody ? 'POST' : 'GET'),
-      headers: { 'Content-Type': 'application/json', ...options.headers, [SESSION_HEADER]: session.sessionId },
-      body: hasBody
-        ? JSON.stringify(sealJson(session.keys, session.sessionId, DIRECTIONS.CLIENT_TO_SERVER, options.body))
-        : undefined,
+  /** @returns null si el servidor ya no reconoce la sesión */
+  async function sendThroughTunnel(request: EncodedRequest, session: SecureSession, signal?: AbortSignal | null): Promise<Response | null> {
+    const rid = toHex(randomBytes(16))
+    const meta = { rid, ts: Date.now() + session.clockOffsetMs, method: request.method, url: request.url, headers: request.headers }
+    const frame = sealFrame(session.keys, session.sessionId, DIRECTIONS.CLIENT_TO_SERVER, packMessage(meta, request.body))
+
+    const outer = await fetchImpl(`${baseUrl}/secure/tunnel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', [SESSION_HEADER]: session.sessionId },
+      body: frame as Uint8Array<ArrayBuffer>,
+      signal: signal ?? undefined,
     })
-    const raw: unknown = await response.json().catch(() => ({}))
-    const body = isEnvelope(raw)
-      ? openJson<T & ErrorBody>(session.keys, session.sessionId, DIRECTIONS.SERVER_TO_CLIENT, raw)
-      : (raw as T & ErrorBody)
-    return { response, body }
+
+    if (!outer.ok) {
+      const error = errorFrom((await outer.json().catch(() => ({}))) as ErrorBody)
+      if (outer.status === 401 && error.code === SESSION_EXPIRED_CODE) return null
+      throw new Error(error.message || 'No fue posible comunicarse por el canal cifrado')
+    }
+
+    const sealed = new Uint8Array(await outer.arrayBuffer())
+    const { meta: responseMeta, body } = unpackMessage<ResponseMeta>(
+      openFrame(session.keys, session.sessionId, DIRECTIONS.SERVER_TO_CLIENT, sealed),
+    )
+    if (responseMeta.rid !== rid) throw new Error('La respuesta cifrada no corresponde a la petición')
+
+    return new Response(NULL_BODY_STATUSES.has(responseMeta.status) ? null : (body as Uint8Array<ArrayBuffer>), {
+      status: responseMeta.status,
+      headers: responseMeta.headers,
+    })
   }
 
   /**
-   * Petición cifrada: el cuerpo sale cifrado y la respuesta se descifra y verifica.
+   * Igual que fetch(`${API}${path}`, init), pero todo viaja cifrado con ChaCha20.
    * Si el servidor ya no reconoce la sesión (p. ej. se reinició), acuerda otra y reintenta una vez.
    */
-  async function request<T>(path: string, options: SecureRequestOptions = {}): Promise<T> {
-    let result = await send<T>(path, options, await getSession())
-    if (result.response.status === 401 && errorFrom(result.body).code === SESSION_EXPIRED_CODE) {
-      resetSession()
-      result = await send<T>(path, options, await getSession())
-    }
-    if (!result.response.ok) {
-      throw new Error(errorFrom(result.body).message || 'No fue posible completar la solicitud')
-    }
-    return result.body
+  async function secureFetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const request = await encodeRequest(path, init)
+    const first = await sendThroughTunnel(request, await getSession(), init.signal)
+    if (first) return first
+
+    resetSession()
+    const retry = await sendThroughTunnel(request, await getSession(), init.signal)
+    if (!retry) throw new Error('No fue posible establecer el canal cifrado')
+    return retry
   }
 
-  /** Para la edición en tiempo real: cifra/descifra tramas binarias de WebSocket. */
-  async function sealRealtimeFrame(update: Uint8Array): Promise<{ sessionId: string; frame: Uint8Array }> {
-    const session = await getSession()
-    return { sessionId: session.sessionId, frame: sealFrame(session.keys, session.sessionId, DIRECTIONS.CLIENT_TO_SERVER, update) }
+  /** WebSocket cifrado hacia la URL indicada (edición en tiempo real y avisos). */
+  function openWebSocket(url: string): SecureWebSocket {
+    return new SecureWebSocket(url, { getSession, resetSession, WebSocketImpl })
   }
 
-  async function openRealtimeFrame(frame: Uint8Array): Promise<Uint8Array> {
-    const session = await getSession()
-    return openFrame(session.keys, session.sessionId, DIRECTIONS.SERVER_TO_CLIENT, frame)
-  }
-
-  return { getSession, resetSession, request, sealRealtimeFrame, openRealtimeFrame }
+  return { getSession, resetSession, fetch: secureFetch, openWebSocket }
 }
 
 export type SecureClient = ReturnType<typeof createSecureClient>
