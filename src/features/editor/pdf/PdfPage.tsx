@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
-import { TextLayer, type PDFDocumentProxy } from './pdfjs'
+import { TextLayer, type PDFDocumentProxy } from '../../../lib/pdfjs'
 import type { PageHighlights } from './usePdfSearch'
 import type { Size } from './pdfZoom'
 import { applyHighlights } from './pdfHighlight'

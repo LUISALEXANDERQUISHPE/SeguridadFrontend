@@ -26,6 +26,8 @@ export interface CreateProjectRequest {
   name: string
   description?: string
   content?: string
+  /** HU-16: crea el proyecto como copia de esta plantilla del sistema. */
+  templateId?: string
 }
 
 export interface UpdateProjectRequest {

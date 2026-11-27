@@ -232,6 +232,13 @@
   background: var(--pm-surface-hover);
 }
 
+/* HU-16: grupo separado para "Plantillas" */
+.pm-nav ul.pm-nav-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pm-border);
+}
+
 .pm-nav-item.is-active {
   background: var(--pm-surface-selected);
   color: #fff;
@@ -805,6 +812,10 @@ html:has(.pm-dialog[open]) {
 /* ---------- HU-25: modal ancho (compartir) ---------- */
 .pm-dialog.is-wide {
   width: min(680px, calc(100% - 32px));
+}
+
+.pm-dialog.is-large {
+  width: min(960px, calc(100% - 32px));
 }
 
 /* ---------- HU-25: invitaciones pendientes en el panel ---------- */

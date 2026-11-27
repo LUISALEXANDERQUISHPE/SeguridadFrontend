@@ -17,6 +17,9 @@ const NAV_ITEMS: readonly NavItem[] = [
 
 interface DashboardSidebarProps {
   activeFilter: ProjectFilter
+  /** HU-16: la galería de plantillas está abierta (ninguna sección de proyectos queda activa). */
+  isTemplatesActive: boolean
+  onOpenTemplates: () => void
   displayName: string
   isUploading: boolean
   onFilterChange: (filter: ProjectFilter) => void
@@ -28,6 +31,8 @@ interface DashboardSidebarProps {
 /** Barra lateral del panel de proyectos: marca, "Nuevo proyecto", secciones y cuenta. */
 export function DashboardSidebar({
   activeFilter,
+  isTemplatesActive,
+  onOpenTemplates,
   displayName,
   isUploading,
   onFilterChange,
@@ -35,6 +40,8 @@ export function DashboardSidebar({
   onUpload,
   onSignOut,
 }: Readonly<DashboardSidebarProps>) {
+  const isProjectSection = (filter: ProjectFilter) => !isTemplatesActive && activeFilter === filter
+
   return (
     <aside className="pm-sidebar">
       <div className="pm-brand">
@@ -44,7 +51,12 @@ export function DashboardSidebar({
         <span className="pm-brand-name">Secureleaf</span>
       </div>
 
-      <NewProjectMenu isUploading={isUploading} onCreateBlank={onCreateBlank} onUpload={onUpload} />
+      <NewProjectMenu
+        isUploading={isUploading}
+        onCreateBlank={onCreateBlank}
+        onUpload={onUpload}
+        onFromTemplate={onOpenTemplates}
+      />
 
       <nav className="pm-nav" aria-label="Secciones de proyectos">
         <ul>
@@ -52,8 +64,8 @@ export function DashboardSidebar({
             <li key={item.filter}>
               <button
                 type="button"
-                className={`pm-nav-item ${activeFilter === item.filter ? 'is-active' : ''}`}
-                aria-current={activeFilter === item.filter ? 'page' : undefined}
+                className={`pm-nav-item ${isProjectSection(item.filter) ? 'is-active' : ''}`}
+                aria-current={isProjectSection(item.filter) ? 'page' : undefined}
                 onClick={() => onFilterChange(item.filter)}
               >
                 <Icon name={item.icon} />
@@ -61,6 +73,19 @@ export function DashboardSidebar({
               </button>
             </li>
           ))}
+        </ul>
+        <ul className="pm-nav-group">
+          <li>
+            <button
+              type="button"
+              className={`pm-nav-item ${isTemplatesActive ? 'is-active' : ''}`}
+              aria-current={isTemplatesActive ? 'page' : undefined}
+              onClick={onOpenTemplates}
+            >
+              <Icon name="copy" />
+              Plantillas
+            </button>
+          </li>
         </ul>
       </nav>
 

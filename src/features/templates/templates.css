@@ -1,0 +1,288 @@
+/* ==========================================================
+   Galería de plantillas LaTeX (HU-16) — usa las variables del panel de proyectos (--pm-*)
+   ========================================================== */
+
+.tpl-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.tpl-intro {
+  margin: 0;
+  color: var(--pm-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.tpl-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tpl-search {
+  max-width: 520px;
+}
+
+.tpl-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tpl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--pm-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pm-text);
+  font: 13px var(--pm-font);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tpl-chip:hover {
+  background: var(--pm-surface-hover);
+}
+
+.tpl-chip.is-active {
+  border-color: var(--pm-focus);
+  background: var(--pm-surface-selected);
+  font-weight: 600;
+}
+
+.tpl-chip-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pm-bg);
+  color: var(--pm-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ---------- Tarjetas ---------- */
+.tpl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+  margin: 0;
+  padding: 0 0 24px;
+  list-style: none;
+}
+
+.tpl-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--pm-border);
+  border-radius: 12px;
+  background: var(--pm-bg);
+  color: var(--pm-text);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tpl-card:hover,
+.tpl-card:focus-visible {
+  border-color: var(--pm-focus);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 35%);
+  transform: translateY(-2px);
+}
+
+.tpl-card-preview {
+  display: flex;
+  justify-content: center;
+  height: 200px;
+  overflow: hidden;
+  padding-top: 14px;
+  background: #3a4250;
+}
+
+.tpl-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px 16px;
+}
+
+.tpl-card-title {
+  font-size: 15px;
+}
+
+.tpl-card-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--pm-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.tpl-badge {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--pm-surface-selected);
+  color: var(--pm-focus);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* ---------- Miniatura ---------- */
+.tpl-thumbnail {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-start;
+  aspect-ratio: 210 / 297;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 45%);
+}
+
+/* Ya dibujada, toma la proporción real de su página (A4, carta o diapositiva 16:9) */
+.tpl-thumbnail.is-ready {
+  aspect-ratio: auto;
+}
+
+.tpl-thumbnail canvas {
+  display: block;
+  height: auto;
+}
+
+.tpl-thumbnail.is-loading canvas,
+.tpl-thumbnail.is-error canvas {
+  visibility: hidden;
+}
+
+.tpl-thumbnail-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  color: #6b7686;
+  font: 12px var(--pm-font);
+  text-align: center;
+}
+
+/* ---------- Detalle ---------- */
+.tpl-detail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 24px;
+}
+
+.tpl-detail-preview {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #3a4250;
+}
+
+.tpl-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tpl-detail-description {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.tpl-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tpl-tags li {
+  padding: 2px 10px;
+  border: 1px solid var(--pm-border);
+  border-radius: 999px;
+  color: var(--pm-muted);
+  font-size: 12px;
+}
+
+.tpl-section-title {
+  margin: 4px 0 0;
+  font: 600 13px var(--pm-font);
+  color: var(--pm-muted);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.tpl-files {
+  max-height: 150px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--pm-border);
+  border-radius: 8px;
+  background: var(--pm-bg);
+  list-style: none;
+}
+
+.tpl-files li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.tpl-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: 'Consolas', 'Courier New', monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tpl-muted {
+  margin: 0;
+  color: var(--pm-muted);
+  font-size: 12px;
+}
+
+.tpl-use-form {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--pm-border);
+}
+
+@media (max-width: 820px) {
+  .tpl-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .tpl-detail-preview .tpl-thumbnail {
+    max-width: 100%;
+  }
+}
