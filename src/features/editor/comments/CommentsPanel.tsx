@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import Icon from '../../../components/common/Icon'
 import type { CommentReply, CommentThread } from '../../../services/commentService'
 import type { ResolvedAnchor } from './commentAnchors'
+import { ConfirmModal } from '../../projects/components/ProjectModals'
 
 const MAX_LENGTH = 2000
 
@@ -110,14 +111,18 @@ function CommentItem({
   canEditOwn,
   onEdit,
   onDelete,
+  isThread = false,
 }: Readonly<{
   comment: CommentReply
   canDelete: boolean
   canEditOwn: boolean
   onEdit: (commentId: string, content: string) => Promise<boolean>
   onDelete: (commentId: string) => Promise<boolean>
+  /** true si es el comentario principal (borrarlo elimina todo el hilo). */
+  isThread?: boolean
 }>) {
   const [isEditing, setIsEditing] = useState(false)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 
   return (
     <div className="comment-item">
@@ -154,14 +159,29 @@ function CommentItem({
             <button
               type="button"
               className="comment-link is-danger"
-              onClick={() => {
-                if (window.confirm('¿Eliminar este comentario?')) void onDelete(comment.id)
-              }}
+              onClick={() => setIsConfirmingDelete(true)}
             >
               Eliminar
             </button>
           )}
         </div>
+      )}
+      {isConfirmingDelete && (
+        <ConfirmModal
+          title="Eliminar comentario"
+          message={
+            isThread
+              ? '¿Eliminar este comentario? También se eliminarán todas sus respuestas.'
+              : '¿Eliminar esta respuesta?'
+          }
+          confirmLabel="Eliminar"
+          confirmingLabel="Eliminando..."
+          danger
+          onClose={() => setIsConfirmingDelete(false)}
+          onConfirm={async () => {
+            if (!(await onDelete(comment.id))) throw new Error('No se pudo eliminar el comentario')
+          }}
+        />
       )}
     </div>
   )
@@ -277,7 +297,7 @@ export function CommentsPanel({
                 </button>
               )}
 
-              <CommentItem comment={thread} canDelete={canDelete(thread)} canEditOwn={thread.isOwn && canComment} onEdit={onEdit} onDelete={onDelete} />
+              <CommentItem comment={thread} isThread canDelete={canDelete(thread)} canEditOwn={thread.isOwn && canComment} onEdit={onEdit} onDelete={onDelete} />
               {thread.replies.map((reply) => (
                 <CommentItem key={reply.id} comment={reply} canDelete={canDelete(reply)} canEditOwn={reply.isOwn && canComment} onEdit={onEdit} onDelete={onDelete} />
               ))}

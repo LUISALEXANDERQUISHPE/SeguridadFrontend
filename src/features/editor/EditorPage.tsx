@@ -143,6 +143,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const [isCommentsOpen, setIsCommentsOpen] = useState<boolean>(false)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [commentDraft, setCommentDraft] = useState<CommentDraft | null>(null)
+  const [commentHint, setCommentHint] = useState<string | null>(null)
   // Un borrador o un hilo activo pertenecen al archivo en que se crearon
   const [commentsDocumentId, setCommentsDocumentId] = useState<string | null>(documentId)
   if (commentsDocumentId !== documentId) {
@@ -683,9 +684,11 @@ export const EditorPage: React.FC<EditorPageProps> = ({
   const handleStartComment = () => {
     const selection = editorRef.current?.getSelection()
     if (!selection || selection.end <= selection.start || !selection.text.trim()) {
-      window.alert('Primero selecciona en el editor el texto que quieres comentar.')
+      // Aviso dentro del panel (no con el alert del navegador)
+      setCommentHint('Primero selecciona en el editor el texto que quieres comentar.')
       return
     }
+    setCommentHint(null)
     setCommentDraft({ start: selection.start, end: selection.end, quote: selection.text })
   }
 
@@ -840,7 +843,7 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 anchors={commentAnchors}
                 activeThreadId={activeThreadId}
                 isLoading={comments.isLoading}
-                error={comments.error}
+                error={comments.error ?? commentHint}
                 canComment={canComment}
                 canResolve={canResolveComments}
                 draft={commentDraft}
@@ -852,7 +855,10 @@ export const EditorPage: React.FC<EditorPageProps> = ({
                 onEdit={comments.edit}
                 onSetResolved={comments.setResolved}
                 onDelete={comments.remove}
-                onDismissError={comments.clearError}
+                onDismissError={() => {
+                  comments.clearError()
+                  setCommentHint(null)
+                }}
                 onClose={() => setIsCommentsOpen(false)}
               />
             )}
@@ -918,7 +924,8 @@ export const EditorPage: React.FC<EditorPageProps> = ({
         collaboration={
           <CollaboratorsBar
             status={collab.status}
-            collaborators={collab.collaborators}
+            users={collab.projectUsers}
+            currentDocumentId={currentDocument?.id ?? null}
             errorMessage={collab.errorMessage}
             onShare={loadedProjectId ? () => setIsShareOpen(true) : undefined}
           />
