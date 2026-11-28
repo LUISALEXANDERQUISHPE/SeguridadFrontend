@@ -1,0 +1,43 @@
+# Caddy: HTTPS automático (Let's Encrypt), archivos del frontend y proxy hacia el backend.
+# Variables (las pasa docker-compose):
+#   DOMAIN           dominio público, ej. secureleaf.duckdns.org
+#   SUPABASE_ORIGIN  URL de Supabase, se permite en connect-src (login)
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API REST y WebSocket de colaboración (/api/collab) -> backend.
+	# Las respuestas de la API llevan sus propias cabeceras (helmet).
+	handle /api/* {
+		reverse_proxy backend:5000
+	}
+
+	# Aplicación React (SPA)
+	handle {
+		root * /srv
+
+		# Mismas cabeceras que securityHeaders.ts (versión compilada: sin nonce)
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self' data:; connect-src 'self' {$SUPABASE_ORIGIN}; worker-src 'self' blob:; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+			X-Frame-Options "DENY"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+			Cross-Origin-Opener-Policy "same-origin"
+			Cross-Origin-Resource-Policy "same-origin"
+			Strict-Transport-Security "max-age=31536000"
+			-Server
+		}
+
+		# Los archivos de /assets llevan hash en el nombre: caché permanente en el navegador.
+		# El resto (index.html) se revalida siempre para que cada despliegue se vea de inmediato.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@notAssets not path /assets/*
+		header @notAssets Cache-Control "no-cache"
+
+		# Rutas del cliente (ej. /proyecto/123) -> index.html
+		try_files {path} /index.html
+		file_server
+	}
+}
