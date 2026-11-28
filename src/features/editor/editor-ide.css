@@ -2264,3 +2264,92 @@
   font-size: 12px;
   font-weight: 700;
 }
+
+/* HU-25: invitación rechazada (el estado cambia en vivo en el modal de compartir) */
+.share-person.is-declined .share-avatar {
+  background: #4a2327;
+  color: #ffd2d2;
+}
+
+.share-declined-tag {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #4a2327;
+  color: #ffb4b0;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Avatares de presencia del proyecto junto a "Compartir", con tooltip propio */
+.collab-avatar-item {
+  position: relative;
+  margin-left: -6px;
+}
+
+.collab-avatar-item:first-child {
+  margin-left: 0;
+}
+
+.collab-avatar-item .collab-avatar {
+  margin-left: 0;
+  cursor: default;
+}
+
+.collab-avatar-item .collab-avatar:focus-visible {
+  outline: 2px solid var(--ide-focus);
+  outline-offset: 1px;
+}
+
+.collab-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--ide-border);
+  border-radius: 8px;
+  background: #262f3c;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  color: var(--ide-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.collab-tooltip strong {
+  color: var(--ide-text);
+  font-size: 13px;
+}
+
+.collab-tooltip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collab-tooltip-tag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #3a4557;
+  color: var(--ide-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.collab-avatar-item:hover .collab-tooltip,
+.collab-avatar-item:focus-within .collab-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}

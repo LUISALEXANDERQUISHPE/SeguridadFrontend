@@ -16,6 +16,7 @@ import DashboardSidebar from './components/DashboardSidebar'
 import ProjectTable from './components/ProjectTable'
 import BulkActionsBar from './components/BulkActionsBar'
 import ProjectDialogs from './components/ProjectDialogs'
+import { ConfirmModal } from './components/ProjectModals'
 import type { ProjectActionHandlers } from './components/ProjectRowActions'
 import './projects.css'
 
@@ -65,6 +66,8 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
   const [searchTerm, setSearchTerm] = useState('')
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT)
   const [modal, setModal] = useState<ProjectModalState>(null)
+  // HU-25: proyecto compartido del que el usuario pidió salir (espera confirmación)
+  const [projectToLeave, setProjectToLeave] = useState<Project | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -186,14 +189,15 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         () => downloadPdfFile(project.documentId ?? '', project.name),
         'Error al descargar el PDF',
       ),
-    onLeave: (project) => {
-      if (!window.confirm(`¿Salir de «${project.name}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`)) return
-      void runWithFeedback(async () => {
-        await leaveProject(project.id)
-        store.refresh()
-        store.showNotice(`Saliste del proyecto "${project.name}".`)
-      }, 'No se pudo salir del proyecto')
-    },
+    // Se confirma en un popup de la aplicación (no con el confirm del navegador)
+    onLeave: (project) => setProjectToLeave(project),
+  }
+
+  const confirmLeave = async () => {
+    if (!projectToLeave) return
+    await leaveProject(projectToLeave.id)
+    store.refresh()
+    store.showNotice(`Saliste del proyecto "${projectToLeave.name}".`)
   }
 
   const renderContent = () => {
@@ -320,6 +324,19 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         onArchive={store.archive}
         onDelete={store.remove}
       />
+
+      {projectToLeave && (
+        <ConfirmModal
+          title="Salir del proyecto"
+          message={`¿Salir de «${projectToLeave.name}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`}
+          confirmLabel="Salir del proyecto"
+          confirmingLabel="Saliendo..."
+          danger
+          icon="logout"
+          onClose={() => setProjectToLeave(null)}
+          onConfirm={confirmLeave}
+        />
+      )}
 
       {inbox.linkInvitation && (
         <InvitationLinkDialog

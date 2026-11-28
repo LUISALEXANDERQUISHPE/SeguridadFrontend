@@ -1,5 +1,5 @@
 import Icon from '../../../components/common/Icon'
-import type { Collaborator, CollabStatus } from './useCollaboration'
+import type { CollabStatus, ProjectPresenceUser } from './useCollaboration'
 
 const STATUS_TEXT: Partial<Record<CollabStatus, string>> = {
   connecting: 'Conectando...',
@@ -9,6 +9,7 @@ const STATUS_TEXT: Partial<Record<CollabStatus, string>> = {
 
 const MAX_AVATARS = 4
 
+/** "William Andrés" -> "WA", "ana@correo.com" -> "AC". */
 function initials(name: string): string {
   const parts = name.trim().split(/[\s@._-]+/).filter(Boolean)
   return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? '')).toUpperCase()
@@ -16,17 +17,21 @@ function initials(name: string): string {
 
 interface CollaboratorsBarProps {
   status: CollabStatus
-  collaborators: Collaborator[]
+  /** Personas conectadas al proyecto (en cualquiera de sus archivos), sin incluirse a uno mismo. */
+  users: ProjectPresenceUser[]
   errorMessage: string | null
+  /** Archivo abierto por el usuario actual: indica quién está en el mismo archivo. */
+  currentDocumentId?: string | null
   onShare?: () => void
 }
 
-/** Estado de la conexión en tiempo real, avatares de quienes editan ahora y botón para compartir. */
-export function CollaboratorsBar({ status, collaborators, errorMessage, onShare }: Readonly<CollaboratorsBarProps>) {
-  // Un mismo usuario puede tener el proyecto abierto en varias pestañas: se muestra una sola vez
-  const uniqueUsers = [...new Map(collaborators.map((user) => [user.userId, user])).values()]
-  const visible = uniqueUsers.slice(0, MAX_AVATARS)
-  const hidden = uniqueUsers.length - visible.length
+/**
+ * Avatares de quienes están en el proyecto ahora, junto al botón "Compartir" (como en Overleaf):
+ * la inicial de cada persona y, al pasar el mouse, su nombre completo y el archivo que tiene abierto.
+ */
+export function CollaboratorsBar({ status, users, errorMessage, currentDocumentId, onShare }: Readonly<CollaboratorsBarProps>) {
+  const visible = users.slice(0, MAX_AVATARS)
+  const hidden = users.slice(MAX_AVATARS)
   const statusText = STATUS_TEXT[status]
 
   return (
@@ -39,18 +44,38 @@ export function CollaboratorsBar({ status, collaborators, errorMessage, onShare 
       )}
 
       {visible.length > 0 && (
-        <ul className="collab-avatars" aria-label="Colaboradores conectados">
-          {visible.map((user) => (
-            <li
-              key={user.userId}
-              className="collab-avatar"
-              style={{ background: user.color }}
-              title={`${user.name}${user.canEdit ? '' : ' (solo lectura)'} está editando`}
-            >
-              {initials(user.name)}
+        <ul className="collab-avatars" aria-label="Personas conectadas al proyecto">
+          {visible.map((user) => {
+            const where = user.documentId === currentDocumentId ? 'En este archivo' : `En ${user.documentName}`
+            return (
+              <li key={user.userId} className="collab-avatar-item">
+                <span
+                  className="collab-avatar"
+                  style={{ background: user.color }}
+                  tabIndex={0}
+                  aria-label={`${user.name}. ${where}${user.canEdit ? '' : '. Solo lectura'}`}
+                >
+                  {initials(user.name)}
+                </span>
+                {/* Tooltip propio: aparece al pasar el mouse o al enfocar con el teclado */}
+                <span className="collab-tooltip" role="tooltip">
+                  <strong>{user.name}</strong>
+                  <span>{where}</span>
+                  {!user.canEdit && <span className="collab-tooltip-tag">Solo lectura</span>}
+                </span>
+              </li>
+            )
+          })}
+          {hidden.length > 0 && (
+            <li className="collab-avatar-item">
+              <span className="collab-avatar collab-avatar-more" tabIndex={0} aria-label={`${hidden.length} personas más`}>
+                +{hidden.length}
+              </span>
+              <span className="collab-tooltip" role="tooltip">
+                {hidden.map((user) => <span key={user.userId}>{user.name}</span>)}
+              </span>
             </li>
-          ))}
-          {hidden > 0 && <li className="collab-avatar collab-avatar-more" title={`${hidden} más`}>+{hidden}</li>}
+          )}
         </ul>
       )}
 

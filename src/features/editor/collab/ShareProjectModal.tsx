@@ -19,7 +19,9 @@ import {
 } from '../../../services/invitationService'
 import type { AssignableRole } from '../../../types/project'
 import { getRoleLabel } from '../../projects/utils/projectList'
+import { ConfirmModal } from '../../projects/components/ProjectModals'
 import useShareSuggestions from './useShareSuggestions'
+import { useProjectNotifications } from '../../projects/hooks/useProjectNotifications'
 
 interface ShareProjectModalProps {
   projectId: string
@@ -58,6 +60,8 @@ const formatDate = (iso: string) => new Date(iso).toLocaleDateString('es', { day
 export function ShareProjectModal({ projectId, projectName, canShare, onClose, onLeft }: Readonly<ShareProjectModalProps>) {
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([])
+  // Invitaciones rechazadas mientras el modal está abierto (se muestran con su estado)
+  const [declined, setDeclined] = useState<ProjectInvitation[]>([])
   // Enlaces que se pueden copiar en esta sesión (el token solo llega al invitar o reenviar)
   const [links, setLinks] = useState<Record<string, string>>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -68,6 +72,10 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose, o
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Acción que espera confirmación en el popup (quitar acceso o salir del proyecto)
+  const [pendingConfirm, setPendingConfirm] = useState<
+    { kind: 'remove'; member: ProjectMember } | { kind: 'leave' } | null
+  >(null)
 
   // Autocompletado del correo que se está escribiendo (después de la última coma)
   const [isListOpen, setIsListOpen] = useState(false)
@@ -91,6 +99,28 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose, o
       .finally(() => { if (mounted) setIsLoading(false) })
     return () => { mounted = false }
   }, [projectId, canShare])
+
+  // HU-25: el estado de cada invitación cambia solo cuando la persona acepta o rechaza
+  // (el backend avisa al propietario en tiempo real)
+  useProjectNotifications((event) => {
+    if (event.projectId !== projectId) return
+    if (event.type === 'invitation-accepted') {
+      setInvitations((previous) => previous.filter((item) => item.id !== event.invitationId))
+      setDeclined((previous) => previous.filter((item) => item.id !== event.invitationId))
+      // La persona pasa a "Acceso al proyecto" con su rol
+      getProjectMembers(projectId).then(setMembers).catch(() => {})
+      setNotice(`${event.acceptedBy || 'La persona invitada'} aceptó la invitación y ahora es ${getRoleLabel(event.role).toLowerCase()}.`)
+    } else if (event.type === 'invitation-declined') {
+      // "invitations" es el estado actual: el hook siempre llama a la versión más reciente de este callback
+      const invitation = invitations.find((item) => item.id === event.invitationId)
+      if (invitation) setDeclined((list) => [...list.filter((item) => item.id !== invitation.id), invitation])
+      setInvitations((previous) => previous.filter((item) => item.id !== event.invitationId))
+      setNotice(`${event.declinedBy || 'La persona invitada'} rechazó la invitación.`)
+    } else if (event.type === 'member-left') {
+      getProjectMembers(projectId).then(setMembers).catch(() => {})
+      setNotice(`${event.userName || 'Un colaborador'} salió del proyecto.`)
+    }
+  })
 
   const chooseSuggestion = (suggestion: ShareSuggestion) => {
     const parts = emails.split(/([,;])/)
@@ -194,12 +224,8 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose, o
   const handleMemberChange = (member: ProjectMember, value: string) => {
     const who = member.name || member.email || 'Esa persona'
     if (value === REMOVE_ACCESS) {
-      if (!window.confirm(`¿Quitar el acceso de ${who} al proyecto? Si lo tiene abierto, se le cerrará.`)) return
-      void runInvitationAction(member.userId, async () => {
-        await removeProjectMember(projectId, member.userId)
-        setMembers((previous) => previous.filter((item) => item.userId !== member.userId))
-        setNotice(`${who} ya no tiene acceso al proyecto.`)
-      })
+      // Se confirma en un popup de la aplicación (no con el confirm del navegador)
+      setPendingConfirm({ kind: 'remove', member })
       return
     }
     const role = value as AssignableRole
@@ -210,12 +236,36 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose, o
     })
   }
 
-  const handleLeave = () => {
-    if (!window.confirm(`¿Salir de «${projectName}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`)) return
-    void runInvitationAction('leave', async () => {
+  // Volver a invitar a quien rechazó (crea una invitación nueva con el mismo rol)
+  const handleReinvite = (invitation: ProjectInvitation) =>
+    runInvitationAction(invitation.id, async () => {
+      const result = await inviteToProject(projectId, [invitation.email], invitation.role)
+      rememberLinks(result.invitations)
+      setDeclined((previous) => previous.filter((item) => item.id !== invitation.id))
+      setInvitations((previous) => [
+        ...previous.filter((item) => !result.invitations.some((created) => created.id === item.id)),
+        ...result.invitations.map(({ token: _token, ...rest }) => rest),
+      ])
+      setNotice(
+        result.invitations.length > 0
+          ? `Se invitó de nuevo a ${invitation.email}.`
+          : `No se pudo invitar de nuevo: ${result.skipped.map((item) => item.reason).join(', ')}.`,
+      )
+    })
+
+  const handleLeave = () => setPendingConfirm({ kind: 'leave' })
+
+  /** Acción aceptada en el popup de confirmación. Si falla, el error se muestra dentro del popup. */
+  const confirmPendingAction = async () => {
+    if (pendingConfirm?.kind === 'remove') {
+      const { member } = pendingConfirm
+      await removeProjectMember(projectId, member.userId)
+      setMembers((previous) => previous.filter((item) => item.userId !== member.userId))
+      setNotice(`${member.name || member.email || 'Esa persona'} ya no tiene acceso al proyecto.`)
+    } else if (pendingConfirm?.kind === 'leave') {
       await leaveProject(projectId)
       onLeft?.()
-    })
+    }
   }
 
   const handleCopy = async (invitationId: string) => {
@@ -228,7 +278,7 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose, o
     }
   }
 
-  const accessCount = members.length + invitations.length
+  const accessCount = members.length + invitations.length + declined.length
 
   return (
     <Modal title={`Compartir ${projectName}`} icon="users" size="wide" isBusy={isSubmitting} onClose={onClose}>
@@ -374,25 +424,68 @@ export function ShareProjectModal({ projectId, projectName, canShare, onClose, o
                 </span>
               </li>
             ))}
+            {declined.map((invitation) => (
+              <li key={invitation.id} className="share-person is-declined">
+                <span className="share-avatar" aria-hidden="true">{invitation.email.charAt(0).toUpperCase()}</span>
+                <span className="share-person-text">
+                  <span className="share-person-name">
+                    {invitation.email} <span className="share-declined-tag">Rechazó la invitación</span>
+                  </span>
+                  <span className="share-person-email">{getRoleLabel(invitation.role)}</span>
+                </span>
+                <span className="share-person-actions">
+                  <button type="button" className="share-link-btn" onClick={() => void handleReinvite(invitation)} disabled={busyId === invitation.id}>
+                    Invitar de nuevo
+                  </button>
+                  <button
+                    type="button"
+                    className="share-link-btn"
+                    onClick={() => setDeclined((previous) => previous.filter((item) => item.id !== invitation.id))}
+                  >
+                    Quitar de la lista
+                  </button>
+                </span>
+              </li>
+            ))}
           </ul>
         )}
       </section>
 
       <div className="pm-dialog-actions">
         {!canShare && onLeft && (
-          <button
-            type="button"
-            className="pm-btn pm-btn-ghost is-danger share-leave-btn"
-            onClick={handleLeave}
-            disabled={busyId === 'leave'}
-          >
-            {busyId === 'leave' ? 'Saliendo...' : 'Salir del proyecto'}
+          <button type="button" className="pm-btn pm-btn-ghost is-danger share-leave-btn" onClick={handleLeave}>
+            Salir del proyecto
           </button>
         )}
         <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
           Cerrar
         </button>
       </div>
+
+      {pendingConfirm?.kind === 'remove' && (
+        <ConfirmModal
+          title="Quitar acceso"
+          message={`¿Quitar el acceso de ${pendingConfirm.member.name || pendingConfirm.member.email} al proyecto? Si lo tiene abierto, se le cerrará.`}
+          confirmLabel="Quitar acceso"
+          confirmingLabel="Quitando..."
+          danger
+          icon="users"
+          onClose={() => setPendingConfirm(null)}
+          onConfirm={confirmPendingAction}
+        />
+      )}
+      {pendingConfirm?.kind === 'leave' && (
+        <ConfirmModal
+          title="Salir del proyecto"
+          message={`¿Salir de «${projectName}»? Dejarás de tener acceso hasta que te vuelvan a invitar.`}
+          confirmLabel="Salir del proyecto"
+          confirmingLabel="Saliendo..."
+          danger
+          icon="logout"
+          onClose={() => setPendingConfirm(null)}
+          onConfirm={confirmPendingAction}
+        />
+      )}
     </Modal>
   )
 }

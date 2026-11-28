@@ -41,6 +41,16 @@ export interface Collaborator {
   head: number | null
 }
 
+/** Persona conectada a algún archivo del proyecto. */
+export interface ProjectPresenceUser {
+  userId: string
+  name: string
+  color: string
+  canEdit: boolean
+  documentId: string
+  documentName: string
+}
+
 type ServerMessage =
   | { type: 'init'; clientId: number; canEdit: boolean; state: string; users: PresenceUser[] }
   | { type: 'update'; update: string }
@@ -53,6 +63,8 @@ type ServerMessage =
   | { type: 'access'; canEdit: boolean }
   // HU-25: alguien creó, editó, resolvió o borró un comentario de este archivo
   | { type: 'comments-changed' }
+  // Quién está conectado al proyecto, en cualquiera de sus archivos (avatares junto a "Compartir")
+  | { type: 'project-presence'; users: ProjectPresenceUser[] }
 
 /** HU-25: el servidor cerró la conexión porque el usuario ya no tiene acceso al proyecto. */
 const ACCESS_REVOKED_CODE = 4403
@@ -99,6 +111,8 @@ export function useCollaboration({
   const [canEdit, setCanEdit] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [collaborators, setCollaborators] = useState<Collaborator[]>([])
+  const [projectUsers, setProjectUsers] = useState<ProjectPresenceUser[]>([])
+  const ownUserIdRef = useRef<string | null>(null)
 
   const docRef = useRef<Y.Doc | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -150,6 +164,7 @@ export function useCollaboration({
     if (!enabled || !documentId) {
       setStatus('disabled')
       setCollaborators([])
+      setProjectUsers([])
       return
     }
 
@@ -203,6 +218,7 @@ export function useCollaboration({
             Y.applyUpdate(doc, base64ToBytes(message.state), REMOTE_ORIGIN)
             attempts = 0
             ownClientIdRef.current = message.clientId
+            ownUserIdRef.current = message.users.find((user) => user.clientId === message.clientId)?.userId ?? null
             canEditRef.current = message.canEdit
             presenceRef.current = new Map(message.users.map((user) => [user.clientId, user]))
             syncedRef.current = true
@@ -247,6 +263,10 @@ export function useCollaboration({
             if (lostEdit) socket.close(RESYNC_CODE, 'Permisos actualizados')
             break
           }
+          case 'project-presence':
+            // Uno mismo no se muestra en la barra (igual que en Overleaf)
+            setProjectUsers(message.users.filter((user) => user.userId !== ownUserIdRef.current))
+            break
           case 'comments-changed':
             callbacksRef.current.onCommentsChanged?.()
             break
@@ -260,6 +280,7 @@ export function useCollaboration({
         if (disposed) return
 
         setCollaborators([])
+        setProjectUsers([])
         if (FATAL_CLOSE_CODES.has(event.code)) {
           setStatus('error')
           setErrorMessage(event.reason || 'No fue posible unirse a la edición colaborativa')
@@ -289,6 +310,7 @@ export function useCollaboration({
       docRef.current = null
       syncedRef.current = false
       setCollaborators([])
+      setProjectUsers([])
     }
   }, [documentId, enabled, refreshCollaborators])
 
@@ -334,7 +356,7 @@ export function useCollaboration({
   const isActive = status !== 'disabled'
   const isSynced = status === 'connected'
 
-  return { status, isActive, isSynced, canEdit, errorMessage, collaborators, applyLocalChange, updateCursor }
+  return { status, isActive, isSynced, canEdit, errorMessage, collaborators, projectUsers, applyLocalChange, updateCursor }
 }
 
 export default useCollaboration
