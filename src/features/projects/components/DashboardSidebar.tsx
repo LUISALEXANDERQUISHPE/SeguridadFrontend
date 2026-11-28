@@ -25,6 +25,7 @@ interface DashboardSidebarProps {
   onFilterChange: (filter: ProjectFilter) => void
   onCreateBlank: () => void
   onUpload: () => void
+  onUploadZip: () => void
   onSignOut: () => void
 }
 
@@ -38,6 +39,7 @@ export function DashboardSidebar({
   onFilterChange,
   onCreateBlank,
   onUpload,
+  onUploadZip,
   onSignOut,
 }: Readonly<DashboardSidebarProps>) {
   const isProjectSection = (filter: ProjectFilter) => !isTemplatesActive && activeFilter === filter
@@ -55,6 +57,7 @@ export function DashboardSidebar({
         isUploading={isUploading}
         onCreateBlank={onCreateBlank}
         onUpload={onUpload}
+        onUploadZip={onUploadZip}
         onFromTemplate={onOpenTemplates}
       />
 
