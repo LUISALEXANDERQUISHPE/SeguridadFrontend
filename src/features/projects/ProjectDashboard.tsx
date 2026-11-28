@@ -17,6 +17,7 @@ import DashboardSidebar from './components/DashboardSidebar'
 import ProjectTable from './components/ProjectTable'
 import BulkActionsBar from './components/BulkActionsBar'
 import ProjectDialogs from './components/ProjectDialogs'
+import ImportZipModal from './components/ImportZipModal'
 import { ConfirmModal } from './components/ProjectModals'
 import type { ProjectActionHandlers } from './components/ProjectRowActions'
 import './projects.css'
@@ -70,6 +71,8 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
   const [searchTerm, setSearchTerm] = useState('')
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT)
   const [modal, setModal] = useState<ProjectModalState>(null)
+  // Modal "Subir proyecto en Zip"
+  const [isZipOpen, setIsZipOpen] = useState(false)
   // HU-25: proyecto compartido del que el usuario pidió salir (espera confirmación)
   const [projectToLeave, setProjectToLeave] = useState<Project | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -340,6 +343,10 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         onFilterChange={changeFilter}
         onCreateBlank={() => setModal({ type: 'create' })}
         onUpload={() => fileInputRef.current?.click()}
+        onUploadZip={() => {
+          store.clearMessages()
+          setIsZipOpen(true)
+        }}
         onSignOut={onSignOut}
       />
 
@@ -369,6 +376,18 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
         onArchive={store.archive}
         onDelete={store.remove}
       />
+
+      {isZipOpen && (
+        <ImportZipModal
+          onClose={() => setIsZipOpen(false)}
+          onImported={(project) => {
+            setIsZipOpen(false)
+            store.refresh()
+            store.showNotice(`Proyecto "${project.name}" importado desde el .zip.`)
+            openProject(project)
+          }}
+        />
+      )}
 
       {projectToLeave && (
         <ConfirmModal

@@ -6,12 +6,14 @@ interface NewProjectMenuProps {
   isUploading: boolean
   onCreateBlank: () => void
   onUpload: () => void
+  /** Abre el modal para subir un proyecto en .zip. */
+  onUploadZip: () => void
   /** HU-16: abre la galería de plantillas. */
   onFromTemplate: () => void
 }
 
 /** Botón "Nuevo proyecto": proyecto en blanco, subir un archivo .tex o partir de una plantilla. */
-export function NewProjectMenu({ isUploading, onCreateBlank, onUpload, onFromTemplate }: Readonly<NewProjectMenuProps>) {
+export function NewProjectMenu({ isUploading, onCreateBlank, onUpload, onUploadZip, onFromTemplate }: Readonly<NewProjectMenuProps>) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const close = useCallback(() => setIsOpen(false), [])
@@ -49,6 +51,12 @@ export function NewProjectMenu({ isUploading, onCreateBlank, onUpload, onFromTem
             <button type="button" className="pm-dropdown-item" onClick={() => choose(onUpload)}>
               <Icon name="upload" />
               Subir proyecto (.tex)
+            </button>
+          </li>
+          <li>
+            <button type="button" className="pm-dropdown-item" onClick={() => choose(onUploadZip)}>
+              <Icon name="archive" />
+              Subir proyecto (.zip)
             </button>
           </li>
           <li>

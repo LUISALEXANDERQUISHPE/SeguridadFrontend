@@ -29,6 +29,19 @@ export async function createProject(data: CreateProjectRequest): Promise<Project
 }
 
 /**
+ * Crea un proyecto a partir de un .zip (como "Subir proyecto en Zip" de Overleaf).
+ * El backend valida el .zip, respeta sus carpetas y elige el .tex principal.
+ */
+export async function importProjectZip(fileName: string, dataBase64: string, signal?: AbortSignal): Promise<Project> {
+  const response = await requestWithAuth<ProjectResponse>('/projects/import-zip', {
+    method: 'POST',
+    body: JSON.stringify({ fileName, dataBase64 }),
+    signal,
+  })
+  return response.project
+}
+
+/**
  * Modifica el nombre o la descripción de un proyecto
  */
 export async function updateProject(id: string, data: UpdateProjectRequest): Promise<Project> {
