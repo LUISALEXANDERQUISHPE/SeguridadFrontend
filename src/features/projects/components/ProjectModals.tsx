@@ -187,3 +187,103 @@ export function ConfirmModal({
     </Modal>
   )
 }
+
+interface TextInputModalProps {
+  title: string
+  label: string
+  initialValue?: string
+  placeholder?: string
+  /** Texto de ayuda bajo el campo. */
+  hint?: string
+  confirmLabel: string
+  confirmingLabel: string
+  icon?: IconName
+  maxLength?: number
+  /** Selecciona solo el nombre sin la extensión al abrir (ej. "nuevo" de "nuevo.tex"). */
+  selectBaseName?: boolean
+  /** Devuelve un mensaje si el valor no es válido (se muestra en el popup sin cerrarlo). */
+  validate?: (value: string) => string | null
+  onClose: () => void
+  /** Si lanza un error, el mensaje se muestra en el popup y este sigue abierto. */
+  onSubmit: (value: string) => Promise<void>
+}
+
+/**
+ * Popup para pedir un texto (reemplaza al prompt() del navegador), con el mismo estilo
+ * que el resto de los modales de la aplicación.
+ */
+export function TextInputModal({
+  title,
+  label,
+  initialValue = '',
+  placeholder,
+  hint,
+  confirmLabel,
+  confirmingLabel,
+  icon = 'edit',
+  maxLength = 255,
+  selectBaseName = false,
+  validate,
+  onClose,
+  onSubmit,
+}: Readonly<TextInputModalProps>) {
+  const [value, setValue] = useState(initialValue)
+  const { isSubmitting, error, setError, run } = useModalSubmit(onClose)
+
+  const handleSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const trimmed = value.trim()
+    const problem = !trimmed ? 'Este campo no puede estar vacío' : validate?.(trimmed) ?? null
+    if (problem) {
+      setError(problem)
+      return
+    }
+    void run(() => onSubmit(trimmed))
+  }
+
+  return (
+    <Modal title={title} icon={icon} isBusy={isSubmitting} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="pm-form" noValidate>
+        {error && (
+          <p className="pm-alert pm-alert-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="pm-field">
+          <label htmlFor="text-input-modal">{label}</label>
+          <input
+            id="text-input-modal"
+            data-autofocus
+            type="text"
+            value={value}
+            placeholder={placeholder}
+            maxLength={maxLength}
+            autoComplete="off"
+            onChange={(event) => {
+              setValue(event.target.value)
+              if (error) setError(null)
+            }}
+            onFocus={(event) => {
+              const input = event.currentTarget
+              const dot = input.value.lastIndexOf('.')
+              if (selectBaseName && dot > 0) input.setSelectionRange(0, dot)
+              else input.select()
+            }}
+          />
+        </div>
+
+        {hint && <p className="pm-hint">{hint}</p>}
+
+        <div className="pm-dialog-actions">
+          <button type="button" className="pm-btn pm-btn-ghost" onClick={onClose} disabled={isSubmitting}>
+            Cancelar
+          </button>
+          <button type="submit" className="pm-btn pm-btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? confirmingLabel : confirmLabel}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
