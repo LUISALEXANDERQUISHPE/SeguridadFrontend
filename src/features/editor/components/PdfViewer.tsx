@@ -16,6 +16,10 @@ interface PdfViewerProps {
   /** Número de errores de la última compilación (insignia del botón de registro). */
   errorCount?: number
   onToggleLogs?: () => void
+  /** Si es true, el registro de compilación reemplaza al PDF en el panel (como en Overleaf). */
+  logsOpen?: boolean
+  /** Contenido del registro de compilación que se muestra en lugar del PDF. */
+  logsPanel?: ReactNode
   documentId: string | null
   documentName?: string
   pdfUrl: string | null
@@ -59,6 +63,8 @@ function findVisiblePage(container: HTMLElement): number {
 export function PdfViewer({
   errorCount = 0,
   onToggleLogs,
+  logsOpen = false,
+  logsPanel,
   documentId,
   documentName = 'documento.pdf',
   pdfUrl,
@@ -96,9 +102,10 @@ export function PdfViewer({
   }, [search.activeMatch?.id, activeMatchPage, goToPage])
 
   const { open: openSearchBar } = search
+  const showLogs = logsOpen && Boolean(logsPanel)
   const openSearch = useCallback(() => {
-    if (hasPages) openSearchBar()
-  }, [hasPages, openSearchBar])
+    if (hasPages && !showLogs) openSearchBar()
+  }, [hasPages, showLogs, openSearchBar])
 
   useFindShortcut(viewerRef, openSearch)
   useWheelZoom(scrollRef, (direction) => setZoom(direction === 'in' ? zoomIn(scale) : zoomOut(scale)))
@@ -179,7 +186,12 @@ export function PdfViewer({
               {isCompiling ? 'Compilando...' : 'Recompilar'}
             </button>
           )}
-          {onToggleLogs && (
+          {showLogs && onToggleLogs && (
+            <button type="button" className="pdf-back-btn" onClick={onToggleLogs} title="Volver a la vista previa del PDF">
+              Volver al PDF
+            </button>
+          )}
+          {!showLogs && onToggleLogs && (
             <button
               type="button"
               className={`pdf-logs-btn ${errorCount > 0 ? 'has-errors' : ''}`}
@@ -191,6 +203,7 @@ export function PdfViewer({
               {errorCount > 0 && <span className="pdf-logs-count">{errorCount}</span>}
             </button>
           )}
+          {!showLogs && (<>
           <button
             type="button"
             className="pdf-logs-btn"
@@ -212,9 +225,10 @@ export function PdfViewer({
           >
             <Icon name="search" />
           </button>
+          </>)}
         </div>
 
-        {hasPages && (
+        {hasPages && !showLogs && (
           <div className="pdf-toolbar-group pdf-nav-group">
             <PdfPageNavigator currentPage={visiblePage} numPages={numPages} onGoToPage={goToPage} />
             <span className="pdf-toolbar-separator" aria-hidden="true" />
@@ -223,7 +237,10 @@ export function PdfViewer({
         )}
       </div>
 
-      {search.isOpen && hasPages && (
+      {/* El PDF sigue montado bajo el registro: conserva la posición de lectura, el zoom y sus eventos */}
+      <div className="pdf-viewer-body">
+      {showLogs && <div className="pdf-logs-overlay">{logsPanel}</div>}
+      {search.isOpen && hasPages && !showLogs && (
         <PdfSearchBar
           query={search.query}
           indexing={search.indexing}
@@ -255,6 +272,7 @@ export function PdfViewer({
         onScroll={handleScroll}
       >
         {renderContent()}
+      </div>
       </div>
     </div>
   )

@@ -902,6 +902,295 @@
   font: 700 10px/16px var(--ide-font, sans-serif);
 }
 
+/* ---------- Registro de compilación dentro del panel del PDF (estilo Overleaf) ---------- */
+.pdf-viewer-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-logs-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--ide-bg, #1b222c);
+}
+
+.pdf-back-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--ide-text, #e7edf3);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ide-text, #e7edf3);
+  font: 600 14px var(--ide-font, sans-serif);
+  cursor: pointer;
+}
+
+.pdf-back-btn:hover {
+  background: var(--ide-hover, #2f3a4a);
+}
+
+.logs-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #2b3444;
+  font-family: var(--ide-font, sans-serif);
+}
+
+.logs-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 0 8px;
+  overflow-x: auto;
+  background: var(--ide-bg, #1b222c);
+}
+
+.logs-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--ide-text, #e7edf3);
+  font: 500 15px var(--ide-font, sans-serif);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.logs-tab:hover {
+  background: var(--ide-hover, #2f3a4a);
+}
+
+.logs-tab.is-active {
+  border-bottom-color: var(--ide-primary, #13804f);
+}
+
+.logs-tab-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #3a4557;
+  color: var(--ide-text, #e7edf3);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.logs-tab-count.has-error { background: #b83a33; color: #fff; }
+.logs-tab-count.has-warning { background: #b5820f; color: #fff; }
+.logs-tab-count.has-info { background: #2f6cb3; color: #fff; }
+
+.logs-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.logs-empty {
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #24442f;
+  color: #c4f1d3;
+  font-size: 14px;
+}
+
+/* Tarjeta de cada mensaje: cabecera de color según el nivel, como en Overleaf */
+.log-entry {
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #3a4557;
+  color: var(--ide-text, #e7edf3);
+}
+
+.log-entry-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #fff;
+}
+
+.log-entry-error .log-entry-header { background: #b83a33; }
+.log-entry-warning .log-entry-header { background: #9a6b06; }
+.log-entry-info .log-entry-header { background: #2f5f9a; }
+
+.log-entry-title {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.log-entry-level {
+  font-weight: 700;
+}
+
+.log-entry-location {
+  flex-shrink: 0;
+  max-width: 45%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: 400 13px/1.5 var(--ide-font, sans-serif);
+  text-align: right;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.log-entry-location:hover {
+  text-decoration-thickness: 2px;
+}
+
+.log-entry-location.is-static {
+  text-decoration: none;
+  opacity: 0.85;
+  cursor: default;
+}
+
+.log-entry-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.log-entry-message,
+.log-entry-context {
+  margin: 0;
+  font: 12.5px/1.45 'Consolas', 'DejaVu Sans Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-entry-context {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: #222a36;
+  color: #c8d2de;
+}
+
+.log-entry-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--ide-focus, #6cc79d);
+  border-radius: 0 4px 4px 0;
+  background: rgba(19, 128, 79, 0.18);
+  color: #c4f1d3;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.log-entry-hint-icon {
+  flex-shrink: 0;
+}
+
+/* Log completo plegable ("Raw logs") */
+.logs-raw {
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: #3a4557;
+}
+
+.logs-raw-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ide-text, #e7edf3);
+  font: 600 15px var(--ide-font, sans-serif);
+  text-align: left;
+  cursor: pointer;
+}
+
+.logs-raw-chevron {
+  display: inline-block;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.logs-raw.is-open .logs-raw-chevron {
+  transform: rotate(90deg);
+}
+
+.logs-raw-text {
+  max-height: 420px;
+  margin: 0;
+  padding: 10px 12px 12px;
+  overflow: auto;
+  border-top: 1px solid var(--ide-border, #333d4b);
+  color: #c8d2de;
+  font: 12px/1.45 'Consolas', 'DejaVu Sans Mono', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.logs-raw-empty {
+  margin: 0;
+  padding: 0 12px 12px;
+  color: var(--ide-muted, #9aa6b4);
+  font-size: 13px;
+}
+
+.logs-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #2b3444;
+}
+
+.logs-footer-time {
+  color: var(--ide-muted, #9aa6b4);
+  font-size: 12px;
+}
+
+.logs-footer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border: 1px solid var(--ide-text, #e7edf3);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ide-text, #e7edf3);
+  font: 600 13px var(--ide-font, sans-serif);
+  cursor: pointer;
+}
+
+.logs-footer-btn:hover:not(:disabled) {
+  background: var(--ide-hover, #2f3a4a);
+}
+
+.logs-footer-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ---------- Explorador de archivos (FileExplorer) en tema oscuro ---------- */
 .ide-root .file-explorer {
   width: 260px;

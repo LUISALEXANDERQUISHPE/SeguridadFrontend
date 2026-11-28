@@ -9,6 +9,8 @@ import type {
   SaveDocumentResponse,
   ProjectNode,
 } from '../types/document'
+// Todas las peticiones viajan cifradas con ChaCha20 (ver src/security)
+import { secureFetch } from '../security'
 
 export const DEFAULT_LATEX_TEMPLATE = `\\documentclass[12pt,a4paper]{article}
 
@@ -33,10 +35,6 @@ Escribe aquí el contenido del documento.
 \\end{document}
 `
 
-const RAW_API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim().replace(/\/$/, '')
-// Ensure base URL points to the /api prefix correctly
-const BASE_URL = RAW_API_URL.endsWith('/api') ? RAW_API_URL : `${RAW_API_URL}/api`
-
 export function getAuthToken(): string | null {
   return localStorage.getItem('seguridad_auth_token')
 }
@@ -53,7 +51,7 @@ async function requestWithAuth<T>(endpoint: string, options: RequestInit = {}): 
   }
 
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-  const response = await fetch(`${BASE_URL}${cleanEndpoint}`, {
+  const response = await secureFetch(cleanEndpoint, {
     ...options,
     headers,
   })
@@ -150,7 +148,7 @@ export async function deleteProjectNode(projectId: string, nodeId: string): Prom
 export async function getProjectNodeBlob(projectId: string, nodeId: string): Promise<Blob> {
   const token = getAuthToken()
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-  const response = await fetch(`${BASE_URL}/documents/project/${projectId}/nodes/${nodeId}/download?inline=true`, { headers })
+  const response = await secureFetch(`/documents/project/${projectId}/nodes/${nodeId}/download?inline=true`, { headers })
   if (!response.ok) throw new Error('No fue posible obtener el archivo')
   return response.blob()
 }
@@ -158,7 +156,7 @@ export async function getProjectNodeBlob(projectId: string, nodeId: string): Pro
 export async function downloadProjectNode(projectId: string, node: ProjectNode): Promise<void> {
   const token = getAuthToken()
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-  const response = await fetch(`${BASE_URL}/documents/project/${projectId}/nodes/${node.id}/download`, { headers })
+  const response = await secureFetch(`/documents/project/${projectId}/nodes/${node.id}/download`, { headers })
   if (!response.ok) throw new Error('No fue posible descargar el archivo')
   const blob = await response.blob()
   const url = window.URL.createObjectURL(blob)
@@ -226,7 +224,7 @@ export async function getPdfBlob(id: string): Promise<Blob> {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(`${BASE_URL}/documents/${id}/pdf?t=${Date.now()}`, {
+  const response = await secureFetch(`/documents/${id}/pdf?t=${Date.now()}`, {
     method: 'GET',
     headers,
   })
@@ -267,7 +265,7 @@ export async function downloadSourceFile(id: string, fileName = 'documento.tex',
       headers['Authorization'] = `Bearer ${token}`
     }
 
-    const response = await fetch(`${BASE_URL}/documents/${id}/source?download=true`, {
+    const response = await secureFetch(`/documents/${id}/source?download=true`, {
       method: 'GET',
       headers,
     })
