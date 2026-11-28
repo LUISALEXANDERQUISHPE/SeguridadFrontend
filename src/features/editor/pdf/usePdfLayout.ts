@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react'
-import type { PDFDocumentProxy } from './pdfjs'
+import type { PDFDocumentProxy } from '../../../lib/pdfjs'
 import type { Size } from './pdfZoom'
 
 /** Tamaño disponible de un elemento, actualizado al redimensionar los paneles. */

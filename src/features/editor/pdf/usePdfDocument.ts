@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CompileStatus } from '../../../types/document'
 import { getPdfBlob } from '../../../services/documentService'
-import { openPdf, type PDFDocumentProxy } from './pdfjs'
+import { openPdf, type PDFDocumentProxy } from '../../../lib/pdfjs'
 
 interface UsePdfDocumentParams {
   documentId: string | null

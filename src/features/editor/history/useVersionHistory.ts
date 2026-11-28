@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useKeyedLoad } from '../../../hooks/useKeyedLoad'
 import { CURRENT_VERSION, type DiffLine, type FileVersion, type VersionHistoryPage } from '../../../types/version'
 import {
   compareVersions,
@@ -18,16 +19,6 @@ export type CompareMode = 'changes' | 'vs-current'
 
 const HISTORY_PAGE_SIZE = 100
 
-interface Loaded<T> {
-  key: string
-  data: T | null
-  error: string | null
-}
-
-function toMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
-}
-
 /** Líneas a mostrar para la versión seleccionada según el modo de comparación. */
 async function loadComparison(documentId: string, number: number, mode: CompareMode): Promise<DiffLine[]> {
   if (mode === 'vs-current') {
@@ -38,43 +29,6 @@ async function loadComparison(documentId: string, number: number, mode: CompareM
     return toAddedLines((await getVersion(documentId, number)).content ?? '')
   }
   return (await compareVersions(documentId, number - 1, number)).lines
-}
-
-/**
- * Ejecuta una carga asíncrona identificada por "key" y descarta respuestas de cargas anteriores.
- * El estado de carga se deriva de la clave, sin actualizaciones síncronas dentro del efecto.
- */
-function useKeyedLoad<T>(key: string | null, load: () => Promise<T>, fallbackError: string) {
-  const [loaded, setLoaded] = useState<Loaded<T>>({ key: '', data: null, error: null })
-  // La clave decide cuándo recargar; la función más reciente se lee desde la ref
-  const loadRef = useRef(load)
-
-  useEffect(() => {
-    loadRef.current = load
-  }, [load])
-
-  useEffect(() => {
-    if (!key) return undefined
-    let isCurrent = true
-    loadRef
-      .current()
-      .then((data) => {
-        if (isCurrent) setLoaded({ key, data, error: null })
-      })
-      .catch((err: unknown) => {
-        if (isCurrent) setLoaded({ key, data: null, error: toMessage(err, fallbackError) })
-      })
-    return () => {
-      isCurrent = false
-    }
-  }, [key, fallbackError])
-
-  const isFresh = loaded.key === key
-  return {
-    data: isFresh ? loaded.data : null,
-    error: isFresh ? loaded.error : null,
-    loading: Boolean(key) && !isFresh,
-  }
 }
 
 interface UseVersionHistoryOptions {

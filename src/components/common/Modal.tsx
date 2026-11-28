@@ -3,6 +3,15 @@ import Icon, { type IconName } from './Icon'
 
 export type ModalTone = 'default' | 'danger'
 
+/** "wide" para formularios amplios (ej. compartir); "large" para vistas previas (ej. plantillas). */
+export type ModalSize = 'default' | 'wide' | 'large'
+
+const SIZE_CLASSES: Readonly<Record<ModalSize, string>> = {
+  default: '',
+  wide: 'is-wide',
+  large: 'is-large',
+}
+
 /** Los elementos con data-autofocus reciben el foco al abrir el modal. */
 const AUTOFOCUS_SELECTOR = '[data-autofocus]'
 
@@ -12,8 +21,7 @@ interface ModalProps {
   icon?: IconName
   /** "danger" resalta en rojo las acciones destructivas. */
   tone?: ModalTone
-  /** "wide" para contenidos más amplios (ej. el modal de compartir). */
-  size?: 'default' | 'wide'
+  size?: ModalSize
   /** Mientras es true no se permite cerrar el modal (operación en curso). */
   isBusy?: boolean
   onClose: () => void
@@ -48,7 +56,7 @@ export function Modal({ title, icon, tone = 'default', size = 'default', isBusy 
   return (
     <dialog
       ref={dialogRef}
-      className={`pm-dialog ${tone === 'danger' ? 'is-danger' : ''} ${size === 'wide' ? 'is-wide' : ''}`}
+      className={`pm-dialog ${tone === 'danger' ? 'is-danger' : ''} ${SIZE_CLASSES[size]}`}
       aria-labelledby={titleId}
       onCancel={handleCancel}
     >

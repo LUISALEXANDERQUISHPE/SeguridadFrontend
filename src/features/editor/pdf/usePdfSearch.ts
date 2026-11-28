@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PDFDocumentProxy } from './pdfjs'
+import type { PDFDocumentProxy } from '../../../lib/pdfjs'
 import { findMatches, type MatchSegment, type PageText, type SearchMatch } from './pdfTextSearch'
 
 /** Resaltados que debe dibujar una página: todas sus coincidencias y la activa. */

@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import Icon from '../../components/common/Icon'
 import type { Project } from '../../types/project'
+import type { LatexTemplate } from '../../types/template'
 import { downloadPdfFile, downloadSourceFile } from '../../services/documentService'
 import { useProjects } from './hooks/useProjects'
 import { useProjectSelection } from './hooks/useProjectSelection'
@@ -18,6 +19,9 @@ import BulkActionsBar from './components/BulkActionsBar'
 import ProjectDialogs from './components/ProjectDialogs'
 import type { ProjectActionHandlers } from './components/ProjectRowActions'
 import './projects.css'
+
+// HU-16: la galería usa pdf.js para las miniaturas; se descarga solo al abrirla
+const TemplateGallery = lazy(() => import('../templates/TemplateGallery'))
 
 const SECTION_TITLES: Record<ProjectFilter, string> = {
   all: 'Todos los proyectos',
@@ -66,6 +70,8 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT)
   const [modal, setModal] = useState<ProjectModalState>(null)
   const [isUploading, setIsUploading] = useState(false)
+  // HU-16: el panel muestra la galería de plantillas en lugar de la lista de proyectos
+  const [isTemplatesView, setIsTemplatesView] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const isArchivedView = filter === 'archived'
@@ -118,6 +124,7 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
   })
 
   const changeFilter = (next: ProjectFilter) => {
+    setIsTemplatesView(false)
     setFilter(next)
     selection.clear()
     store.clearMessages()
@@ -141,6 +148,20 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
   const createAndOpen = async (name: string, description: string, content?: string) => {
     const project = await store.create({ name, description, content })
     if (filter !== 'all' && filter !== 'owned') changeFilter('all')
+    openProject(project)
+  }
+
+  const openTemplates = () => {
+    setIsTemplatesView(true)
+    selection.clear()
+    store.clearMessages()
+  }
+
+  // HU-16: el proyecto es una copia de la plantilla; se abre directamente en el editor
+  const handleUseTemplate = async (template: LatexTemplate, name: string, description: string) => {
+    const project = await store.create({ name, description, templateId: template.id })
+    setIsTemplatesView(false)
+    if (filter !== 'all' && filter !== 'owned') setFilter('all')
     openProject(project)
   }
 
@@ -217,10 +238,99 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
     )
   }
 
+  const renderProjectsPanel = () => (
+    <>
+      <header className="pm-panel-header">
+        <h1>{SECTION_TITLES[filter]}</h1>
+        <span className="pm-count">{visibleProjects.length} proyecto(s)</span>
+        <button
+          type="button"
+          className="pm-refresh-btn"
+          onClick={store.refresh}
+          disabled={store.loading || store.refreshing}
+          title="Actualizar la lista de proyectos"
+        >
+          <Icon name="restore" size={14} className={store.refreshing ? 'is-spinning' : undefined} />
+          {store.refreshing ? 'Actualizando...' : 'Actualizar'}
+        </button>
+      </header>
+
+      <div className="pm-search">
+        <Icon name="search" />
+        <input
+          type="search"
+          placeholder="Buscar en todos los proyectos..."
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          aria-label="Buscar proyectos"
+        />
+      </div>
+
+      {store.error && (
+        <p className="pm-alert pm-alert-error" role="alert">
+          {store.error}
+        </p>
+      )}
+      {store.notice && !store.error && (
+        <output className="pm-alert pm-alert-success">{store.notice}</output>
+      )}
+
+      <InvitationsInbox
+        invitations={inbox.invitations}
+        busyId={inbox.busyId}
+        onAccept={(invitation) => {
+          store.clearMessages()
+          void inbox.accept(invitation).then(handleAccepted)
+        }}
+        onDecline={(invitation) => {
+          store.clearMessages()
+          void inbox.decline(invitation).then((ok) => {
+            if (ok) store.showNotice(`Rechazaste la invitación a "${invitation.projectName ?? 'el proyecto'}".`)
+          })
+        }}
+      />
+
+      {selection.selectedProjects.length > 0 && (
+        <BulkActionsBar
+          selectedProjects={selection.selectedProjects}
+          isArchivedView={isArchivedView}
+          onArchive={(projects) => setModal({ type: 'archive', projects })}
+          onDelete={(projects) => setModal({ type: 'delete', projects })}
+          onRestore={(projects) =>
+            void runWithFeedback(() => store.restore(projects), 'Error al restaurar los proyectos')
+          }
+          onClear={selection.clear}
+        />
+      )}
+
+      <div className="pm-table-wrap">{renderContent()}</div>
+    </>
+  )
+
+  const renderTemplatesPanel = () => (
+    <>
+      <header className="pm-panel-header">
+        <h1>Plantillas</h1>
+      </header>
+      {store.error && (
+        <p className="pm-alert pm-alert-error" role="alert">
+          {store.error}
+        </p>
+      )}
+      <div className="pm-table-wrap">
+        <Suspense fallback={<p className="pm-empty">Cargando plantillas...</p>}>
+          <TemplateGallery onUseTemplate={handleUseTemplate} />
+        </Suspense>
+      </div>
+    </>
+  )
+
   return (
     <div className="pm-dashboard">
       <DashboardSidebar
         activeFilter={filter}
+        isTemplatesActive={isTemplatesView}
+        onOpenTemplates={openTemplates}
         displayName={displayName}
         isUploading={isUploading}
         onFilterChange={changeFilter}
@@ -239,72 +349,7 @@ export function ProjectDashboard({ displayName, onOpenProject, onSignOut }: Read
       />
 
       <main className="pm-main">
-        <div className="pm-panel">
-          <header className="pm-panel-header">
-            <h1>{SECTION_TITLES[filter]}</h1>
-            <span className="pm-count">{visibleProjects.length} proyecto(s)</span>
-            <button
-              type="button"
-              className="pm-refresh-btn"
-              onClick={store.refresh}
-              disabled={store.loading || store.refreshing}
-              title="Actualizar la lista de proyectos"
-            >
-              <Icon name="restore" size={14} className={store.refreshing ? 'is-spinning' : undefined} />
-              {store.refreshing ? 'Actualizando...' : 'Actualizar'}
-            </button>
-          </header>
-
-          <div className="pm-search">
-            <Icon name="search" />
-            <input
-              type="search"
-              placeholder="Buscar en todos los proyectos..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              aria-label="Buscar proyectos"
-            />
-          </div>
-
-          {store.error && (
-            <p className="pm-alert pm-alert-error" role="alert">
-              {store.error}
-            </p>
-          )}
-          {store.notice && !store.error && (
-            <output className="pm-alert pm-alert-success">{store.notice}</output>
-          )}
-
-          <InvitationsInbox
-            invitations={inbox.invitations}
-            busyId={inbox.busyId}
-            onAccept={(invitation) => {
-              store.clearMessages()
-              void inbox.accept(invitation).then(handleAccepted)
-            }}
-            onDecline={(invitation) => {
-              store.clearMessages()
-              void inbox.decline(invitation).then((ok) => {
-                if (ok) store.showNotice(`Rechazaste la invitación a "${invitation.projectName ?? 'el proyecto'}".`)
-              })
-            }}
-          />
-
-          {selection.selectedProjects.length > 0 && (
-            <BulkActionsBar
-              selectedProjects={selection.selectedProjects}
-              isArchivedView={isArchivedView}
-              onArchive={(projects) => setModal({ type: 'archive', projects })}
-              onDelete={(projects) => setModal({ type: 'delete', projects })}
-              onRestore={(projects) =>
-                void runWithFeedback(() => store.restore(projects), 'Error al restaurar los proyectos')
-              }
-              onClear={selection.clear}
-            />
-          )}
-
-          <div className="pm-table-wrap">{renderContent()}</div>
-        </div>
+        <div className="pm-panel">{isTemplatesView ? renderTemplatesPanel() : renderProjectsPanel()}</div>
       </main>
 
       <ProjectDialogs
