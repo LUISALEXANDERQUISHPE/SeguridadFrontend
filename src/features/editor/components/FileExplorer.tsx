@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectNode } from '../../../types/document'
 import { createProjectNode, deleteProjectNode, downloadProjectNode, getProjectTree, moveProjectNode, renameProjectNode } from '../../../services/documentService'
 import { getLatexReference, getStarterContent, isImageFileName, isTextFileName } from '../../../utils/fileTypes'
-import { ConfirmModal } from '../../projects/components/ProjectModals'
+import { ConfirmModal, TextInputModal } from '../../projects/components/ProjectModals'
 
 interface FileExplorerProps {
   projectId: string
@@ -22,7 +22,9 @@ interface FileExplorerProps {
   canManageFiles?: boolean
 }
 
-const sectionPattern = /^\\(section|subsection|subsubsection)\*?\{([^}]*)\}/
+const nameCollator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
+
+const sectionPattern =/^\\(section|subsection|subsubsection)\*?\{([^}]*)\}/
 
 function getExtension(name: string): string {
   return name.match(/(\.[^.]+)$/)?.[1] || ''
@@ -53,6 +55,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [nodeToDelete, setNodeToDelete] = useState<ProjectNode | null>(null)
+  // Archivo o carpeta que se va a crear (espera el nombre en el popup)
+  const [pendingCreate, setPendingCreate] = useState<{ nodeType: 'archivo' | 'carpeta'; parentId: string | null } | null>(null)
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const editingInputRef = useRef<HTMLInputElement | null>(null)
@@ -77,22 +81,20 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
     return () => window.removeEventListener('click', closeMenu)
   }, [])
 
+  // Abre el popup de la aplicación para pedir el nombre (no el prompt del navegador)
   const createNode = async (nodeType: 'archivo' | 'carpeta', parentId: string | null = null) => {
-    const name = window.prompt(
-      nodeType === 'carpeta' ? 'Nombre de la carpeta' : 'Nombre del archivo con su extensión (ej. capitulo1.tex, referencias.bib, datos.csv, estilos.sty)',
-      nodeType === 'carpeta' ? 'nueva-carpeta' : 'nuevo.tex'
-    )
-    if (!name?.trim()) return
-    const cleanName = name.trim()
-    try {
-      const isText = nodeType === 'archivo' && isTextFileName(cleanName)
-      const node = await createProjectNode(projectId, { name: cleanName, nodeType, parentId, content: isText ? getStarterContent(cleanName) : undefined })
-      await reload()
-      if (parentId) setOpenFolders((prev) => new Set(prev).add(parentId))
-      if (isText) onOpenDocument(node.id)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'No fue posible crear el elemento')
-    }
+    setPendingCreate({ nodeType, parentId })
+  }
+
+  /** Crea el archivo o la carpeta con el nombre confirmado. Si falla, el error se ve en el popup. */
+  const confirmCreateNode = async (name: string) => {
+    if (!pendingCreate) return
+    const { nodeType, parentId } = pendingCreate
+    const isText = nodeType === 'archivo' && isTextFileName(name)
+    const node = await createProjectNode(projectId, { name, nodeType, parentId, content: isText ? getStarterContent(name) : undefined })
+    await reload()
+    if (parentId) setOpenFolders((prev) => new Set(prev).add(parentId))
+    if (isText) onOpenDocument(node.id)
   }
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>, parentId: string | null = null) => {
@@ -202,7 +204,15 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
     })
   }, [nodes, currentDocumentId, currentContent, outlineVersion])
 
-  const children = (parentId: string | null) => nodes.filter((node) => node.padre_id === parentId)
+  // Como en Overleaf: primero las carpetas y luego los archivos, cada grupo en orden alfabético
+  // (sin distinguir mayúsculas ni tildes, y "capitulo2" antes que "capitulo10")
+  const children = (parentId: string | null) =>
+    nodes
+      .filter((node) => node.padre_id === parentId)
+      .sort((a, b) => {
+        if (a.tipo_nodo !== b.tipo_nodo) return a.tipo_nodo === 'carpeta' ? -1 : 1
+        return nameCollator.compare(a.nombre, b.nombre)
+      })
   const showContextMenu = (event: React.MouseEvent, node: ProjectNode | null) => {
     event.preventDefault()
     event.stopPropagation()
@@ -305,6 +315,21 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ projectId, currentDo
         {contextMenu.node?.tipo_nodo === 'archivo' && <button type="button" onClick={() => { void downloadProjectNode(projectId, contextMenu.node!); setContextMenu(null) }}>↓ Descargar</button>}
         {canManageFiles && contextMenu.node && <button type="button" className="danger" onClick={() => { setNodeToDelete(contextMenu.node); setContextMenu(null) }}>× Eliminar</button>}
       </div>
+    )}
+    {pendingCreate && (
+      <TextInputModal
+        title={pendingCreate.nodeType === 'carpeta' ? 'Nueva carpeta' : 'Nuevo archivo'}
+        label={pendingCreate.nodeType === 'carpeta' ? 'Nombre de la carpeta' : 'Nombre del archivo con su extensión'}
+        initialValue={pendingCreate.nodeType === 'carpeta' ? 'nueva-carpeta' : 'nuevo.tex'}
+        hint={pendingCreate.nodeType === 'carpeta' ? undefined : 'Por ejemplo: capitulo1.tex, referencias.bib, datos.csv o estilos.sty'}
+        icon={pendingCreate.nodeType === 'carpeta' ? 'folder' : 'file'}
+        selectBaseName={pendingCreate.nodeType === 'archivo'}
+        confirmLabel="Crear"
+        confirmingLabel="Creando..."
+        validate={(value) => (/[\\/:*?"<>|]/.test(value) ? 'El nombre no puede contener \\ / : * ? " < > |' : null)}
+        onClose={() => setPendingCreate(null)}
+        onSubmit={confirmCreateNode}
+      />
     )}
     {nodeToDelete && (
       <ConfirmModal
