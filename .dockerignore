@@ -1,0 +1,9 @@
+.git
+node_modules
+dist
+coverage
+# El .env SÍ entra a la compilación: Vite incrusta sus variables VITE_* (públicas) en el JavaScript
+.env.local
+.env.*.local
+Dockerfile
+.dockerignore
